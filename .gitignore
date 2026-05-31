@@ -1,0 +1,7 @@
+.env
+db/coach.db
+garmin/.garmin_session/
+venv/
+node_modules/
+__pycache__/
+*.pyc

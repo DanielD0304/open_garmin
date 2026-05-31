@@ -1,0 +1,17 @@
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows_all.json:/tmp/workflows_all.json:ro
+    environment:
+      - N8N_HOST=0.0.0.0
+      - GENERIC_TIMEZONE=UTC
+      - DB_TYPE=sqlite
+      - DB_SQLITE_DATABASE=/home/node/.n8n/n8n.db
+    restart: unless-stopped
+
+volumes:
+  n8n_data:
