@@ -19,7 +19,8 @@ Kurzanleitung zum Starten der Open-Garmin-Umgebung lokal (Windows).
 - 2) Lokale API-Wrapper starten (nötig für n8n)
 
   ```powershell
-  python .\db\http_server.py
+  
+  
   # läuft standardmäßig auf http://0.0.0.0:8765
   ```
 

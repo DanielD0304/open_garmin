@@ -21,6 +21,20 @@ from urllib import request as urllib_request
 ROOT_DIR = Path(__file__).resolve().parent.parent
 VENV_PYTHON = ROOT_DIR / "venv" / "Scripts" / "python.exe"
 PYTHON_EXE = str(VENV_PYTHON if VENV_PYTHON.exists() else Path(sys.executable))
+ENV_FILE = ROOT_DIR / ".env"
+
+
+def load_project_env() -> None:
+    """Load simple key=value entries from project .env into process env."""
+    if not ENV_FILE.exists():
+        return
+
+    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        os.environ[key.strip()] = value.strip().strip('"').strip("'")
 
 
 def script_path(*parts: str) -> str:
@@ -188,7 +202,7 @@ def run_db_action(action: str, params: dict) -> tuple[dict, int]:
                 "data": {
                     "report": ollama_report,
                     "mode": "ollama",
-                    "model": os.environ.get("OLLAMA_MODEL", "gemma2"),
+                    "model": os.environ.get("OLLAMA_MODEL", "llama3.2:1b"),
                 },
             }, 200
 
@@ -264,7 +278,7 @@ def build_report_context(summary_data: dict) -> str:
 
 def generate_ollama_report(context: str) -> str | None:
     base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-    model = os.environ.get("OLLAMA_MODEL", "gemma2")
+    model = os.environ.get("OLLAMA_MODEL", "llama3.2:1b")
     payload = {
         "model": model,
         "prompt": context,
@@ -277,7 +291,7 @@ def generate_ollama_report(context: str) -> str | None:
             "Halte den Report unter 500 Woertern. Formatiere mit Markdown-Ueberschriften und Aufzaehlungen."
         ),
         "stream": False,
-        "options": {"temperature": 0.7, "num_predict": 1024},
+        "options": {"temperature": 0.7, "num_predict": 256},
     }
 
     request = urllib_request.Request(
@@ -288,7 +302,7 @@ def generate_ollama_report(context: str) -> str | None:
     )
 
     try:
-        with urllib_request.urlopen(request, timeout=120) as response:
+        with urllib_request.urlopen(request, timeout=300) as response:
             raw = response.read().decode("utf-8")
     except (urllib_error.URLError, TimeoutError, ValueError):
         return None
@@ -407,6 +421,7 @@ class RequestHandler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    load_project_env()
     port = int(os.environ.get("OPEN_GARMIN_API_PORT", "8765"))
     host = os.environ.get("OPEN_GARMIN_API_HOST", "0.0.0.0")
     server = ThreadingHTTPServer((host, port), RequestHandler)

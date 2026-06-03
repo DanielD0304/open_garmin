@@ -30,8 +30,8 @@ const CONFIG = {
   },
 
   // Timeouts (ms) – Ollama-Calls brauchen länger
-  TIMEOUT_DEFAULT: 15_000,
-  TIMEOUT_AI:     120_000,
+  TIMEOUT_DEFAULT: 60_000,
+  TIMEOUT_AI:     600_000,
 
   // Toast Auto-Hide (ms)
   TOAST_DURATION: 4_000,
@@ -105,12 +105,22 @@ async function apiFetch(endpoint, options = {}, timeout = CONFIG.TIMEOUT_DEFAULT
 
     clearTimeout(timer);
 
+    const rawText = await response.text().catch(() => '');
+
     if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unbekannter Fehler');
-      throw new Error(`HTTP ${response.status}: ${errorText}`);
+      throw new Error(`HTTP ${response.status}: ${rawText || 'Unbekannter Fehler'}`);
     }
 
-    return await response.json();
+    if (!rawText) {
+      return {};
+    }
+
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      // Fallback for webhook responses that are plain text.
+      return { message: rawText };
+    }
   } catch (err) {
     clearTimeout(timer);
 
