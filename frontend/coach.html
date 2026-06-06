@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Coach - AI Athletik-Coach</title>
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+  <div class="toast-container" id="toast-container"></div>
+  <div class="app-wrapper">
+    <aside class="sidebar">
+      <div class="sidebar__brand">
+        <div class="sidebar__icon">🧠</div>
+        <div>
+          <div class="sidebar__title">AI Coach</div>
+          <div class="sidebar__subtitle">Coaching Report</div>
+        </div>
+      </div>
+      <nav class="sidebar__nav">
+        <a href="index.html" class="sidebar-nav-link">🏠 Dashboard</a>
+        <a href="nutrition.html" class="sidebar-nav-link">🍽️ Ernährung</a>
+        <a href="health.html" class="sidebar-nav-link">❤️ Health & Training</a>
+        <a href="coach.html" class="sidebar-nav-link active">🧠 AI Coach</a>
+        <a href="history.html" class="sidebar-nav-link">📅 Historie</a>
+      </nav>
+    </aside>
+
+    <div class="main-content">
+      <header class="app-header">
+        <h1 class="app-header__title-main">AI Coach</h1>
+        <div class="app-header__date" id="header-date"></div>
+      </header>
+
+      <main class="dashboard-grid">
+        <section class="card dashboard-grid__report" id="report-section">
+          <div class="card__header">
+            <h2 class="card__title">
+              <span class="card__title-icon">🤖</span>
+              AI Coaching Report
+            </h2>
+            <span class="card__badge" id="report-model-badge">gemma2 via Ollama</span>
+          </div>
+
+          <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:16px;">
+            Basierend auf deinen <strong>Health- und Workout-Daten</strong> der letzten 7 Tage.
+            Ernährungsdaten werden im Report <em>nicht</em> berücksichtigt.
+          </p>
+
+          <button class="btn btn--primary btn--lg btn--block" id="generate-report-btn" type="button">
+            <span class="spinner"></span>
+            <span class="btn__text">🧠 Report generieren</span>
+          </button>
+
+          <!-- Loading Skeleton -->
+          <div class="report-loading" id="report-loading" style="margin-top: 24px;">
+            <div class="skeleton-line" style="width:95%"></div>
+            <div class="skeleton-line"></div>
+            <div class="skeleton-line"></div>
+            <div class="skeleton-line"></div>
+            <div class="skeleton-line"></div>
+          </div>
+
+          <!-- Report Output -->
+          <div class="report-output" id="report-output"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="shared.js"></script>
+  <script src="coach.js"></script>
+</body>
+</html>

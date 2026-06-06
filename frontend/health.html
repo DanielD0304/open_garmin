@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Health & Training - AI Athletik-Coach</title>
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+  <div class="toast-container" id="toast-container"></div>
+  <div class="app-wrapper">
+    <aside class="sidebar">
+      <div class="sidebar__brand">
+        <div class="sidebar__icon">❤️‍🩹</div>
+        <div>
+          <div class="sidebar__title">AI Coach</div>
+          <div class="sidebar__subtitle">Health & Training</div>
+        </div>
+      </div>
+      <nav class="sidebar__nav">
+        <a href="index.html" class="sidebar-nav-link">🏠 Dashboard</a>
+        <a href="nutrition.html" class="sidebar-nav-link">🍽️ Ernährung</a>
+        <a href="health.html" class="sidebar-nav-link active">❤️ Health & Training</a>
+        <a href="coach.html" class="sidebar-nav-link">🧠 AI Coach</a>
+        <a href="history.html" class="sidebar-nav-link">📅 Historie</a>
+      </nav>
+    </aside>
+
+    <div class="main-content">
+      <header class="app-header">
+        <h1 class="app-header__title-main">Health & Training</h1>
+        <div class="app-header__date" id="header-date"></div>
+      </header>
+
+      <main class="dashboard-grid">
+        <!-- Health & Recovery -->
+        <section class="card" id="health-section" style="grid-column: 1 / -1;">
+          <div class="card__header">
+            <h2 class="card__title">
+              <span class="card__title-icon">❤️‍🩹</span>
+              Heute
+            </h2>
+            <span class="card__badge" id="health-source-badge">Keine Daten</span>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-bottom:16px;">
+            <button class="btn btn--primary btn--sm" id="garmin-sync-btn" type="button">
+              <span class="spinner"></span>
+              <span class="btn__text">⌚ Garmin Sync</span>
+            </button>
+            <button class="btn btn--secondary btn--sm" id="garmin-sync-7d-btn" type="button">
+              <span class="spinner"></span>
+              <span class="btn__text">📅 7 Tage laden</span>
+            </button>
+            <button class="btn btn--secondary btn--sm" id="garmin-sync-all-btn" type="button">
+              <span class="spinner"></span>
+              <span class="btn__text">📅 30 Tage laden</span>
+            </button>
+            <button class="btn btn--secondary btn--sm" id="health-refresh-btn" type="button">
+              <span class="btn__text">🔄 Aktualisieren</span>
+            </button>
+          </div>
+
+          <div class="metrics-grid" id="metrics-grid">
+            <div class="metric-tile">
+              <div class="metric-tile__icon">💚</div>
+              <div class="metric-tile__value metric-tile__value--hrv" id="metric-hrv">–</div>
+              <div class="metric-tile__label">HRV (ms)</div>
+            </div>
+            <div class="metric-tile">
+              <div class="metric-tile__icon">😴</div>
+              <div class="metric-tile__value metric-tile__value--sleep" id="metric-sleep">–</div>
+              <div class="metric-tile__label">Sleep Score</div>
+            </div>
+            <div class="metric-tile">
+              <div class="metric-tile__icon">❤️</div>
+              <div class="metric-tile__value metric-tile__value--hr" id="metric-hr">–</div>
+              <div class="metric-tile__label">Ruhepuls</div>
+            </div>
+            <div class="metric-tile">
+              <div class="metric-tile__icon">🔋</div>
+              <div class="metric-tile__value metric-tile__value--battery" id="metric-battery">–</div>
+              <div class="metric-tile__label">Body Battery</div>
+            </div>
+            <div class="metric-tile">
+              <div class="metric-tile__icon">😰</div>
+              <div class="metric-tile__value metric-tile__value--stress" id="metric-stress">–</div>
+              <div class="metric-tile__label">Stress</div>
+            </div>
+            <div class="metric-tile">
+              <div class="metric-tile__icon">👟</div>
+              <div class="metric-tile__value metric-tile__value--steps" id="metric-steps">–</div>
+              <div class="metric-tile__label">Schritte</div>
+            </div>
+          </div>
+
+          <div class="card__header" style="margin-top: 24px;">
+            <h3 class="card__title" style="font-size:0.92rem;">
+              <span class="card__title-icon">🏃</span>
+              Heutige Workouts
+            </h3>
+            <span class="card__badge" id="workout-count-badge">0</span>
+          </div>
+          <div class="workout-list" id="workout-list">
+            <div class="workout-list__empty">Noch keine Workouts synchronisiert.</div>
+          </div>
+
+          <!-- Manuelle Health-Eingabe (Fallback) -->
+          <div class="manual-fallback">
+            <button class="manual-fallback__toggle" id="manual-health-toggle" type="button">
+              ⚙️ Manuelle Eingabe (falls Garmin nicht verfügbar)
+            </button>
+            <form class="manual-fallback__form" id="manual-health-form" autocomplete="off">
+              <div class="form-row--3">
+                <div class="form-group">
+                  <label class="form-label" for="manual-hrv">HRV (ms)</label>
+                  <input class="form-input" type="number" id="manual-hrv" placeholder="z.B. 45" min="0">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="manual-sleep-score">Sleep Score</label>
+                  <input class="form-input" type="number" id="manual-sleep-score" placeholder="0–100" min="0" max="100">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="manual-sleep-hours">Schlaf (h)</label>
+                  <input class="form-input" type="number" id="manual-sleep-hours" placeholder="7.5" min="0" step="0.1">
+                </div>
+              </div>
+              <div class="form-row--3">
+                <div class="form-group">
+                  <label class="form-label" for="manual-resting-hr">Ruhepuls</label>
+                  <input class="form-input" type="number" id="manual-resting-hr" placeholder="bpm" min="0">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="manual-stress">Stress (0–100)</label>
+                  <input class="form-input" type="number" id="manual-stress" placeholder="0–100" min="0" max="100">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="manual-steps">Schritte</label>
+                  <input class="form-input" type="number" id="manual-steps" placeholder="z.B. 8000" min="0">
+                </div>
+              </div>
+              <button type="submit" class="btn btn--secondary btn--block btn--sm" id="manual-health-submit-btn">
+                <span class="spinner"></span>
+                <span class="btn__text">💾 Manuell speichern</span>
+              </button>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="shared.js"></script>
+  <script src="health.js"></script>
+</body>
+</html>

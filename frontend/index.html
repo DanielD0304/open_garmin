@@ -12,262 +12,127 @@
   <!-- Toast Container -->
   <div class="toast-container" id="toast-container"></div>
 
-  <div class="app-container">
+  <div class="app-wrapper">
 
-    <!-- ═══ Header ═══════════════════════════════════════════════ -->
-    <header class="app-header">
-      <div class="app-header__brand">
-        <div class="app-header__icon">🏋️</div>
+    <!-- ═══ Sidebar ═══════════════════════════════════════════════ -->
+    <aside class="sidebar">
+      <div class="sidebar__brand">
+        <div class="sidebar__icon">🏋️</div>
         <div>
-          <h1 class="app-header__title">AI Athletik-Coach</h1>
-          <p class="app-header__subtitle">Training · Erholung · Ernährung</p>
+          <div class="sidebar__title">AI Coach</div>
+          <div class="sidebar__subtitle">Training & Erholung</div>
         </div>
       </div>
-      <div class="app-header__date" id="header-date"></div>
-    </header>
+      <nav class="sidebar__nav">
+        <a href="index.html" class="sidebar-nav-link active">🏠 Dashboard</a>
+        <a href="nutrition.html" class="sidebar-nav-link">🍽️ Ernährung</a>
+        <a href="health.html" class="sidebar-nav-link">❤️ Health & Training</a>
+        <a href="coach.html" class="sidebar-nav-link">🧠 AI Coach</a>
+        <a href="history.html" class="sidebar-nav-link">📅 Historie</a>
+      </nav>
+    </aside>
 
-    <!-- ═══ Dashboard Grid ═══════════════════════════════════════ -->
-    <main class="dashboard-grid">
+    <!-- ═══ Main Content ═════════════════════════════════════════ -->
+    <div class="main-content">
+      
+      <header class="app-header">
+        <h1 class="app-header__title-main">Dashboard</h1>
+        <div class="app-header__date" id="header-date"></div>
+      </header>
 
-      <!-- ─── Ernährungs-Tracker (Links) ──────────────────────── -->
-      <section class="card" id="nutrition-section">
-        <div class="card__header">
-          <h2 class="card__title">
-            <span class="card__title-icon">🍽️</span>
-            Ernährungs-Tracker
-          </h2>
-          <span class="card__badge" id="nutrition-meal-count">0 Einträge</span>
-        </div>
+      <!-- ═══ Dashboard Grid ═══════════════════════════════════════ -->
+      <main class="dashboard-grid">
 
-        <!-- Mahlzeit-Formular -->
-        <form id="food-form" autocomplete="off">
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label" for="food-name">Lebensmittel</label>
-              <input class="form-input" type="text" id="food-name" placeholder="z.B. Skyr, Apfel…" required>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="meal-label">Mahlzeit</label>
-              <select class="form-select" id="meal-label">
-                <option value="breakfast">🌅 Frühstück</option>
-                <option value="lunch">☀️ Mittagessen</option>
-                <option value="dinner">🌙 Abendessen</option>
-                <option value="snack">🍎 Snack</option>
-              </select>
-            </div>
+        <!-- ─── Makro-Übersicht ──────────────────────── -->
+        <section class="card">
+          <div class="card__header">
+            <h2 class="card__title">
+              <span class="card__title-icon">📊</span>
+              Heutige Makros
+            </h2>
           </div>
-
-          <div class="form-row--4">
-            <div class="form-group">
-              <label class="form-label" for="food-amount">Menge (g)</label>
-              <input class="form-input" type="number" id="food-amount" placeholder="150" min="0" step="1">
+          <div class="macro-bar" id="macro-bar">
+            <div class="macro-bar__item">
+              <div class="macro-bar__value macro-bar__value--cal" id="macro-cal">0</div>
+              <div class="macro-bar__label">kcal</div>
             </div>
-            <div class="form-group">
-              <label class="form-label" for="food-calories">Kalorien</label>
-              <input class="form-input" type="number" id="food-calories" placeholder="kcal" min="0" step="1">
+            <div class="macro-bar__item">
+              <div class="macro-bar__value macro-bar__value--prot" id="macro-prot">0</div>
+              <div class="macro-bar__label">Protein</div>
             </div>
-            <div class="form-group">
-              <label class="form-label" for="food-protein">Protein (g)</label>
-              <input class="form-input" type="number" id="food-protein" placeholder="0" min="0" step="0.1">
+            <div class="macro-bar__item">
+              <div class="macro-bar__value macro-bar__value--carbs" id="macro-carbs">0</div>
+              <div class="macro-bar__label">Carbs</div>
             </div>
-            <div class="form-group">
-              <label class="form-label" for="food-carbs">Carbs (g)</label>
-              <input class="form-input" type="number" id="food-carbs" placeholder="0" min="0" step="0.1">
+            <div class="macro-bar__item">
+              <div class="macro-bar__value macro-bar__value--fat" id="macro-fat">0</div>
+              <div class="macro-bar__label">Fett</div>
             </div>
           </div>
+        </section>
 
-          <div class="form-row--3">
-            <div class="form-group">
-              <label class="form-label" for="food-fat">Fett (g)</label>
-              <input class="form-input" type="number" id="food-fat" placeholder="0" min="0" step="0.1">
+        <!-- ─── Health & Recovery ──────────────────────── -->
+        <section class="card">
+          <div class="card__header">
+            <h2 class="card__title">
+              <span class="card__title-icon">❤️‍🩹</span>
+              Health & Recovery
+            </h2>
+            <span class="card__badge" id="health-source-badge">Keine Daten</span>
+          </div>
+
+          <!-- Health Metriken -->
+          <div class="metrics-grid" id="metrics-grid">
+            <div class="metric-tile">
+              <div class="metric-tile__icon">💚</div>
+              <div class="metric-tile__value metric-tile__value--hrv" id="metric-hrv">–</div>
+              <div class="metric-tile__label">HRV (ms)</div>
             </div>
-            <div class="form-group">
-              <label class="form-label" for="food-fiber">Ballaststoffe (g)</label>
-              <input class="form-input" type="number" id="food-fiber" placeholder="0" min="0" step="0.1">
+            <div class="metric-tile">
+              <div class="metric-tile__icon">😴</div>
+              <div class="metric-tile__value metric-tile__value--sleep" id="metric-sleep">–</div>
+              <div class="metric-tile__label">Sleep Score</div>
             </div>
-            <div class="form-group" style="display:flex;align-items:flex-end;">
-              <button type="submit" class="btn btn--primary btn--block btn--sm" id="food-submit-btn">
-                <span class="spinner"></span>
-                <span class="btn__text">+ Hinzufügen</span>
-              </button>
+            <div class="metric-tile">
+              <div class="metric-tile__icon">❤️</div>
+              <div class="metric-tile__value metric-tile__value--hr" id="metric-hr">–</div>
+              <div class="metric-tile__label">Ruhepuls</div>
+            </div>
+            <div class="metric-tile">
+              <div class="metric-tile__icon">🔋</div>
+              <div class="metric-tile__value metric-tile__value--battery" id="metric-battery">–</div>
+              <div class="metric-tile__label">Body Battery</div>
+            </div>
+            <div class="metric-tile">
+              <div class="metric-tile__icon">😰</div>
+              <div class="metric-tile__value metric-tile__value--stress" id="metric-stress">–</div>
+              <div class="metric-tile__label">Stress</div>
+            </div>
+            <div class="metric-tile">
+              <div class="metric-tile__icon">👟</div>
+              <div class="metric-tile__value metric-tile__value--steps" id="metric-steps">–</div>
+              <div class="metric-tile__label">Schritte</div>
             </div>
           </div>
-        </form>
 
-        <!-- Makro-Übersicht Heute -->
-        <div class="macro-bar" id="macro-bar">
-          <div class="macro-bar__item">
-            <div class="macro-bar__value macro-bar__value--cal" id="macro-cal">0</div>
-            <div class="macro-bar__label">kcal</div>
+          <!-- Heutige Workouts -->
+          <div class="card__header" style="margin-top: 24px;">
+            <h3 class="card__title" style="font-size:0.92rem;">
+              <span class="card__title-icon">🏃</span>
+              Heutige Workouts
+            </h3>
+            <span class="card__badge" id="workout-count-badge">0</span>
           </div>
-          <div class="macro-bar__item">
-            <div class="macro-bar__value macro-bar__value--prot" id="macro-prot">0</div>
-            <div class="macro-bar__label">Protein</div>
+          <div class="workout-list" id="workout-list">
+            <div class="workout-list__empty">Noch keine Workouts synchronisiert.</div>
           </div>
-          <div class="macro-bar__item">
-            <div class="macro-bar__value macro-bar__value--carbs" id="macro-carbs">0</div>
-            <div class="macro-bar__label">Carbs</div>
-          </div>
-          <div class="macro-bar__item">
-            <div class="macro-bar__value macro-bar__value--fat" id="macro-fat">0</div>
-            <div class="macro-bar__label">Fett</div>
-          </div>
-        </div>
+        </section>
 
-        <!-- Heutiges Food-Log -->
-        <div class="food-log" id="food-log">
-          <div class="food-log__empty">
-            <span class="food-log__empty-icon">📋</span>
-            Noch keine Einträge heute – füge deine erste Mahlzeit hinzu.
-          </div>
-        </div>
-      </section>
+      </main>
+    </div> <!-- Close main-content -->
+  </div> <!-- Close app-wrapper -->
 
-      <!-- ─── Health & Recovery (Rechts) ──────────────────────── -->
-      <section class="card" id="health-section">
-        <div class="card__header">
-          <h2 class="card__title">
-            <span class="card__title-icon">❤️‍🩹</span>
-            Health & Recovery
-          </h2>
-          <span class="card__badge" id="health-source-badge">Keine Daten</span>
-        </div>
-
-        <!-- Garmin Sync -->
-        <div style="display:flex;gap:10px;margin-bottom:16px;">
-          <button class="btn btn--primary btn--sm" id="garmin-sync-btn" type="button">
-            <span class="spinner"></span>
-            <span class="btn__text">⌚ Garmin Sync</span>
-          </button>
-          <button class="btn btn--secondary btn--sm" id="health-refresh-btn" type="button">
-            <span class="btn__text">🔄 Aktualisieren</span>
-          </button>
-        </div>
-
-        <!-- Health Metriken -->
-        <div class="metrics-grid" id="metrics-grid">
-          <div class="metric-tile">
-            <div class="metric-tile__icon">💚</div>
-            <div class="metric-tile__value metric-tile__value--hrv" id="metric-hrv">–</div>
-            <div class="metric-tile__label">HRV (ms)</div>
-          </div>
-          <div class="metric-tile">
-            <div class="metric-tile__icon">😴</div>
-            <div class="metric-tile__value metric-tile__value--sleep" id="metric-sleep">–</div>
-            <div class="metric-tile__label">Sleep Score</div>
-          </div>
-          <div class="metric-tile">
-            <div class="metric-tile__icon">❤️</div>
-            <div class="metric-tile__value metric-tile__value--hr" id="metric-hr">–</div>
-            <div class="metric-tile__label">Ruhepuls</div>
-          </div>
-          <div class="metric-tile">
-            <div class="metric-tile__icon">🔋</div>
-            <div class="metric-tile__value metric-tile__value--battery" id="metric-battery">–</div>
-            <div class="metric-tile__label">Body Battery</div>
-          </div>
-          <div class="metric-tile">
-            <div class="metric-tile__icon">😰</div>
-            <div class="metric-tile__value metric-tile__value--stress" id="metric-stress">–</div>
-            <div class="metric-tile__label">Stress</div>
-          </div>
-          <div class="metric-tile">
-            <div class="metric-tile__icon">👟</div>
-            <div class="metric-tile__value metric-tile__value--steps" id="metric-steps">–</div>
-            <div class="metric-tile__label">Schritte</div>
-          </div>
-        </div>
-
-        <!-- Heutige Workouts -->
-        <div class="card__header" style="margin-top: 8px;">
-          <h3 class="card__title" style="font-size:0.92rem;">
-            <span class="card__title-icon">🏃</span>
-            Heutige Workouts
-          </h3>
-          <span class="card__badge" id="workout-count-badge">0</span>
-        </div>
-        <div class="workout-list" id="workout-list">
-          <div class="workout-list__empty">Noch keine Workouts synchronisiert.</div>
-        </div>
-
-        <!-- Manuelle Health-Eingabe (Fallback) -->
-        <div class="manual-fallback">
-          <button class="manual-fallback__toggle" id="manual-health-toggle" type="button">
-            ⚙️ Manuelle Eingabe (falls Garmin nicht verfügbar)
-          </button>
-          <form class="manual-fallback__form" id="manual-health-form" autocomplete="off">
-            <div class="form-row--3">
-              <div class="form-group">
-                <label class="form-label" for="manual-hrv">HRV (ms)</label>
-                <input class="form-input" type="number" id="manual-hrv" placeholder="z.B. 45" min="0">
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="manual-sleep-score">Sleep Score</label>
-                <input class="form-input" type="number" id="manual-sleep-score" placeholder="0–100" min="0" max="100">
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="manual-sleep-hours">Schlaf (h)</label>
-                <input class="form-input" type="number" id="manual-sleep-hours" placeholder="7.5" min="0" step="0.1">
-              </div>
-            </div>
-            <div class="form-row--3">
-              <div class="form-group">
-                <label class="form-label" for="manual-resting-hr">Ruhepuls</label>
-                <input class="form-input" type="number" id="manual-resting-hr" placeholder="bpm" min="0">
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="manual-stress">Stress (0–100)</label>
-                <input class="form-input" type="number" id="manual-stress" placeholder="0–100" min="0" max="100">
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="manual-steps">Schritte</label>
-                <input class="form-input" type="number" id="manual-steps" placeholder="z.B. 8000" min="0">
-              </div>
-            </div>
-            <button type="submit" class="btn btn--secondary btn--block btn--sm" id="manual-health-submit-btn">
-              <span class="spinner"></span>
-              <span class="btn__text">💾 Manuell speichern</span>
-            </button>
-          </form>
-        </div>
-      </section>
-
-      <!-- ─── AI Coaching Report (Volle Breite) ──────────────── -->
-      <section class="card dashboard-grid__report" id="report-section">
-        <div class="card__header">
-          <h2 class="card__title">
-            <span class="card__title-icon">🤖</span>
-            AI Coaching Report
-          </h2>
-          <span class="card__badge" id="report-model-badge">gemma2 via Ollama</span>
-        </div>
-
-        <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:16px;">
-          Basierend auf deinen <strong>Health- und Workout-Daten</strong> der letzten 7 Tage.
-          Ernährungsdaten werden im Report <em>nicht</em> berücksichtigt.
-        </p>
-
-        <button class="btn btn--primary btn--lg btn--block" id="generate-report-btn" type="button">
-          <span class="spinner"></span>
-          <span class="btn__text">🧠 Report generieren</span>
-        </button>
-
-        <!-- Loading Skeleton -->
-        <div class="report-loading" id="report-loading">
-          <div class="skeleton-line" style="width:95%"></div>
-          <div class="skeleton-line"></div>
-          <div class="skeleton-line"></div>
-          <div class="skeleton-line"></div>
-          <div class="skeleton-line"></div>
-        </div>
-
-        <!-- Report Output -->
-        <div class="report-output" id="report-output"></div>
-      </section>
-
-    </main>
-  </div>
-
+  <script src="shared.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

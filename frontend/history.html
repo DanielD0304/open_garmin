@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Lokaler AI Athletik- und Ernährungs-Coach – Historische Daten.">
+  <title>Historie - AI Athletik- & Ernährungs-Coach</title>
+  <link rel="stylesheet" href="index.css">
+  <style>
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+      font-size: 0.9rem;
+    }
+    .history-table th, .history-table td {
+      text-align: left;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .history-table th {
+      font-weight: 600;
+      color: var(--text-secondary);
+      background: var(--bg-input);
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+    .history-table tr:hover {
+      background: var(--bg-card-hover);
+    }
+    .history-table td {
+      color: var(--text-primary);
+    }
+    .history-section {
+      grid-column: 1 / -1;
+    }
+    .filter-bar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <div class="app-wrapper">
+
+    <!-- ═══ Sidebar ═══════════════════════════════════════════════ -->
+    <aside class="sidebar">
+      <div class="sidebar__brand">
+        <div class="sidebar__icon">🏋️</div>
+        <div>
+          <div class="sidebar__title">AI Coach</div>
+          <div class="sidebar__subtitle">Training & Erholung</div>
+        </div>
+      </div>
+      <nav class="sidebar__nav">
+        <a href="index.html" class="sidebar-nav-link">🏠 Dashboard</a>
+        <a href="history.html" class="sidebar-nav-link active">📅 Historie</a>
+      </nav>
+    </aside>
+
+    <!-- ═══ Main Content ═════════════════════════════════════════ -->
+    <div class="main-content">
+      
+      <header class="app-header">
+        <h1 class="app-header__title-main">Historie</h1>
+        <div class="app-header__date" id="header-date"></div>
+      </header>
+
+      <!-- ═══ History Grid ═══════════════════════════════════════ -->
+      <main class="dashboard-grid">
+
+      <!-- ─── Historische Daten ──────────────────────── -->
+      <section class="card history-section">
+        <div class="card__header">
+          <h2 class="card__title">
+            <span class="card__title-icon">📅</span>
+            Gesundheitsdaten Historie
+          </h2>
+          <span class="card__badge" id="history-count-badge">Lade...</span>
+        </div>
+
+        <div class="filter-bar">
+          <button class="btn btn--secondary btn--sm" id="btn-load-7" type="button">7 Tage</button>
+          <button class="btn btn--secondary btn--sm" id="btn-load-30" type="button">30 Tage</button>
+          <button class="btn btn--secondary btn--sm" id="btn-load-90" type="button">90 Tage</button>
+        </div>
+
+        <div style="overflow-x: auto;">
+          <table class="history-table" id="history-table">
+            <thead>
+              <tr>
+                <th>Datum</th>
+                <th>HRV</th>
+                <th>Sleep Score</th>
+                <th>Ruhepuls</th>
+                <th>Stress</th>
+                <th>Schritte</th>
+                <th>Workouts</th>
+              </tr>
+            </thead>
+            <tbody id="history-tbody">
+              <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Daten werden geladen...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+    </div> <!-- Close main-content -->
+  </div> <!-- Close app-wrapper -->
+
+  <script src="history.js"></script>
+</body>
+</html>

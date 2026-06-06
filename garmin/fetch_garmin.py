@@ -232,7 +232,7 @@ def fetch_workouts(garmin, target_date):
     workouts = []
 
     try:
-        activities = garmin.get_activities_fordate(date_str)
+        activities = garmin.get_activities_by_date(date_str, date_str, "")
         if not activities:
             return workouts
 
@@ -247,8 +247,8 @@ def fetch_workouts(garmin, target_date):
                 "training_load": act.get("activityTrainingLoad"),
             }
             workouts.append(workout)
-    except Exception:
-        pass  # Keine Workouts verfuegbar
+    except Exception as e:
+        print(f"[Garmin Fetch Error] Workouts konnten nicht geladen werden: {e}", file=sys.stderr)
 
     return workouts
 
