@@ -1,15 +1,18 @@
-const state = {
-  isGeneratingReport: false,
-};
+/**
+ * AI Coach Page – coach.js (ES Module)
+ */
+import { CONFIG, apiFetch, todayISO, setButtonLoading, showToast } from './shared.js';
+
+let isGeneratingReport = false;
 
 async function generateReport() {
-  if (state.isGeneratingReport) return;
+  if (isGeneratingReport) return;
 
   const btn = document.getElementById('generate-report-btn');
   const loading = document.getElementById('report-loading');
   const output = document.getElementById('report-output');
 
-  state.isGeneratingReport = true;
+  isGeneratingReport = true;
   setButtonLoading('generate-report-btn', true);
   btn.disabled = true;
   output.textContent = '';
@@ -24,13 +27,13 @@ async function generateReport() {
 
     loading.classList.remove('is-active');
     output.innerHTML = formatReportOutput(data.report || data.message || 'Kein Report erhalten.');
-    showToast('✅ Report generiert!', 'success');
+    showToast('Report generiert!', 'success');
   } catch (err) {
     loading.classList.remove('is-active');
-    output.textContent = '❌ Fehler: ' + err.message;
-    showToast('❌ Report-Generierung fehlgeschlagen.', 'error');
+    output.textContent = 'Fehler: ' + err.message;
+    showToast('Report-Generierung fehlgeschlagen.', 'error');
   } finally {
-    state.isGeneratingReport = false;
+    isGeneratingReport = false;
     setButtonLoading('generate-report-btn', false);
     btn.disabled = false;
   }

@@ -1,36 +1,41 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * AI Athletik- & Ernährungs-Coach – Shared Application Logic
+ * AI Athletik- & Ernährungs-Coach – Shared Module (ES Module)
  * ═══════════════════════════════════════════════════════════════
+ *
+ * Alle geteilten Funktionen und Konfiguration.
+ * Import via: import { CONFIG, apiFetch, showToast, ... } from './shared.js'
  */
 
 // ── Configuration ──────────────────────────────────────────────
-const CONFIG = {
-  N8N_BASE_URL: 'http://localhost:5678/webhook',
+
+export const CONFIG = {
+  // Direkt zum FastAPI-Server (kein n8n-Proxy mehr)
+  API_BASE: '/api',
   ENDPOINTS: {
-    ADD_FOOD:       '/nutrition/add',
-    DELETE_FOOD:    '/nutrition/delete',
-    GET_FOOD_LOG:   '/nutrition/today',
-    SYNC_GARMIN:    '/garmin/sync',
-    SUBMIT_HEALTH:  '/health/manual',
-    GET_HEALTH:     '/health/today',
-    GET_WORKOUTS:   '/workouts/today',
-    GENERATE_REPORT: '/report/generate',
+    ADD_FOOD:        '/api/nutrition/add',
+    DELETE_FOOD:     '/api/nutrition/delete',
+    GET_FOOD_LOG:    '/api/nutrition/today',
+    SYNC_GARMIN:     '/api/garmin/sync',
+    SUBMIT_HEALTH:   '/api/health/manual',
+    GET_HEALTH:      '/api/health/today',
+    GENERATE_REPORT: '/api/report/generate',
+    GET_SUMMARY:     '/api/history/summary',
   },
   TIMEOUT_DEFAULT: 60_000,
   TIMEOUT_AI:     600_000,
-  TOAST_DURATION: 4_000,
-  API_URL: 'http://localhost:8765/run' // Local Python Server Fallback/Direct
+  TOAST_DURATION:  4_000,
 };
+
 
 // ── Shared Utilities ───────────────────────────────────────────
 
-function todayISO() {
+export function todayISO() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function formatDateDE(isoDate) {
+export function formatDateDE(isoDate) {
   if (!isoDate) return '-';
   const d = new Date(isoDate + 'T00:00:00');
   return d.toLocaleDateString('de-DE', {
@@ -41,17 +46,30 @@ function formatDateDE(isoDate) {
   });
 }
 
-function generateId() {
+export function formatDateShortDE(isoDate) {
+  if (!isoDate) return '-';
+  const d = new Date(isoDate + 'T00:00:00');
+  return d.toLocaleDateString('de-DE', {
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
+export function generateId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function apiFetch(endpoint, options = {}, timeout = CONFIG.TIMEOUT_DEFAULT) {
-  const url = CONFIG.N8N_BASE_URL + endpoint;
+
+// ── API Fetch (direkt zu FastAPI) ──────────────────────────────
+
+export async function apiFetch(endpoint, options = {}, timeout = CONFIG.TIMEOUT_DEFAULT) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
   try {
-    const response = await fetch(url, {
+    const response = await fetch(endpoint, {
       ...options,
       signal: controller.signal,
       headers: {
@@ -68,13 +86,22 @@ async function apiFetch(endpoint, options = {}, timeout = CONFIG.TIMEOUT_DEFAULT
       throw new Error(`HTTP ${response.status}: ${rawText || 'Unbekannter Fehler'}`);
     }
 
-    if (!rawText) {
-      return {};
-    }
+    if (!rawText) return {};
 
     try {
-      return JSON.parse(rawText);
-    } catch {
+      const parsed = JSON.parse(rawText);
+      // Unwrap {status, data} envelope if present
+      if (parsed.status === 'ok' && parsed.data !== undefined) {
+        return parsed.data;
+      }
+      if (parsed.status === 'error') {
+        throw new Error(parsed.message || 'Unbekannter Fehler');
+      }
+      return parsed;
+    } catch (parseErr) {
+      if (parseErr.message?.includes('Unbekannter Fehler') || parseErr.message?.includes('fehlgeschlagen')) {
+        throw parseErr;
+      }
       return { message: rawText };
     }
   } catch (err) {
@@ -84,38 +111,18 @@ async function apiFetch(endpoint, options = {}, timeout = CONFIG.TIMEOUT_DEFAULT
       throw new Error('Zeitüberschreitung – der Server hat nicht rechtzeitig geantwortet.');
     }
     if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
-      throw new Error('Verbindung zu n8n fehlgeschlagen. Läuft n8n auf ' + CONFIG.N8N_BASE_URL + '?');
+      throw new Error('Verbindung zum Server fehlgeschlagen. Läuft der Server auf Port 8765?');
     }
     throw err;
   }
 }
 
-// Direkter lokaler API-Fetch (ohne n8n)
-async function localApiFetch(action, params = {}) {
-  const response = await fetch(CONFIG.API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, params })
-  });
-  
-  if (!response.ok) {
-    throw new Error(`HTTP Error: ${response.status}`);
-  }
-  
-  const result = await response.json();
-  if (result.status === 'error') {
-    throw new Error(result.message);
-  }
-  return result.data;
-}
-
 
 // ── UI Helpers ─────────────────────────────────────────────────
 
-function setButtonLoading(btnId, isLoading) {
+export function setButtonLoading(btnId, isLoading) {
   const btn = document.getElementById(btnId);
   if (!btn) return;
-
   if (isLoading) {
     btn.classList.add('btn--loading');
     btn.disabled = true;
@@ -125,7 +132,7 @@ function setButtonLoading(btnId, isLoading) {
   }
 }
 
-function showToast(message, type = 'info') {
+export function showToast(message, type = 'info') {
   const container = document.getElementById('toast-container');
   if (!container) return;
   const toast = document.createElement('div');
@@ -139,13 +146,15 @@ function showToast(message, type = 'info') {
   }, CONFIG.TOAST_DURATION);
 }
 
-function escapeHtml(text) {
+export function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
 }
 
-// Initialisiere Datum im Header, falls vorhanden
+
+// ── Init: Datum im Header ──────────────────────────────────────
+
 document.addEventListener('DOMContentLoaded', () => {
   const dateEl = document.getElementById('header-date');
   if (dateEl) {

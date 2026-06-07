@@ -1,3 +1,8 @@
+/**
+ * Dashboard – app.js (ES Module)
+ */
+import { CONFIG, apiFetch, todayISO, escapeHtml } from './shared.js';
+
 const state = {
   todayFoodLog: [],
   todayMacros: { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 },
@@ -92,13 +97,8 @@ function renderWorkoutList() {
   }
 
   const activityIcons = {
-    running: '🏃',
-    cycling: '🚴',
-    strength: '🏋️',
-    swimming: '🏊',
-    hiking: '🥾',
-    yoga: '🧘',
-    default: '💪',
+    running: '🏃', cycling: '🚴', strength: '🏋️',
+    swimming: '🏊', hiking: '🥾', yoga: '🧘', default: '💪',
   };
 
   container.innerHTML = state.workouts.map(w => {

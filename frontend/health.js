@@ -1,3 +1,8 @@
+/**
+ * Health & Training Page – health.js (ES Module)
+ */
+import { CONFIG, apiFetch, todayISO, setButtonLoading, showToast, escapeHtml } from './shared.js';
+
 const state = {
   healthData: null,
   workouts: [],
@@ -13,7 +18,7 @@ async function syncGarmin() {
     });
 
     if (data.status === 'error') {
-      showToast('⚠️ Garmin: ' + (data.message || 'Login fehlgeschlagen. Bitte manuell eingeben.'), 'warning');
+      showToast('Garmin: ' + (data.message || 'Login fehlgeschlagen. Bitte manuell eingeben.'), 'warning');
       showManualHealthForm();
       return;
     }
@@ -22,9 +27,9 @@ async function syncGarmin() {
     state.workouts = data.workouts || [];
     renderHealthMetrics();
     renderWorkoutList();
-    showToast('✅ Garmin-Daten synchronisiert!', 'success');
+    showToast('Garmin-Daten synchronisiert!', 'success');
   } catch (err) {
-    showToast('❌ ' + err.message, 'error');
+    showToast(err.message, 'error');
     showManualHealthForm();
   } finally {
     setButtonLoading('garmin-sync-btn', false);
@@ -48,14 +53,14 @@ async function syncHistoricalGarmin(days, btnId) {
       });
 
       if (data.status === 'error') {
-        showToast('⚠️ Abbruch bei ' + isoDate + ': ' + (data.message || 'Fehler'), 'warning');
+        showToast('Abbruch bei ' + isoDate + ': ' + (data.message || 'Fehler'), 'warning');
         break;
       }
     }
-    showToast('✅ Daten im Hintergrund gespeichert! Der AI-Report kann sie jetzt nutzen.', 'success');
+    showToast('Daten gespeichert! Der AI-Report kann sie jetzt nutzen.', 'success');
     fetchTodayHealth(); 
   } catch (err) {
-    showToast('❌ Fehler beim Sync: ' + err.message, 'error');
+    showToast('Fehler beim Sync: ' + err.message, 'error');
   } finally {
     setButtonLoading(btnId, false);
   }
@@ -80,10 +85,10 @@ async function submitManualHealth(data) {
       method: 'POST',
       body: JSON.stringify(payload),
     });
-    showToast('✅ Gesundheitsdaten gespeichert!', 'success');
+    showToast('Gesundheitsdaten gespeichert!', 'success');
   } catch (err) {
-    console.warn('n8n nicht erreichbar:', err.message);
-    showToast('⚠️ n8n nicht erreichbar – Daten nur lokal angezeigt.', 'warning');
+    console.warn('Server nicht erreichbar:', err.message);
+    showToast('Server nicht erreichbar – Daten nur lokal angezeigt.', 'warning');
   }
 
   state.healthData = payload;
@@ -139,13 +144,8 @@ function renderWorkoutList() {
   }
 
   const activityIcons = {
-    running: '🏃',
-    cycling: '🚴',
-    strength: '🏋️',
-    swimming: '🏊',
-    hiking: '🥾',
-    yoga: '🧘',
-    default: '💪',
+    running: '🏃', cycling: '🚴', strength: '🏋️',
+    swimming: '🏊', hiking: '🥾', yoga: '🧘', default: '💪',
   };
 
   container.innerHTML = state.workouts.map(w => {
@@ -190,7 +190,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('manual-health-form').addEventListener('submit', (e) => {
     e.preventDefault();
-
     submitManualHealth({
       hrv: parseFloat(document.getElementById('manual-hrv').value) || null,
       sleepScore: parseInt(document.getElementById('manual-sleep-score').value) || null,

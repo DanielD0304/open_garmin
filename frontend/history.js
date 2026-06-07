@@ -1,24 +1,9 @@
 /**
- * History Page Logic
+ * History Page – history.js (ES Module)
+ * 
+ * FIX: Benutzt jetzt shared.js statt eigener Duplikate.
  */
-
-const API_URL = 'http://localhost:8765/run';
-
-function formatDateDE(isoDate) {
-  if (!isoDate) return '-';
-  const d = new Date(isoDate + 'T00:00:00');
-  return d.toLocaleDateString('de-DE', {
-    weekday: 'short',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  });
-}
-
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+import { CONFIG, apiFetch, todayISO, formatDateShortDE } from './shared.js';
 
 async function loadHistory(days) {
   const tbody = document.getElementById('history-tbody');
@@ -28,35 +13,18 @@ async function loadHistory(days) {
   badge.textContent = `Letzte ${days} Tage`;
 
   try {
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        action: 'get_summary',
-        params: { days: days }
-      })
+    const data = await apiFetch(CONFIG.ENDPOINTS.GET_SUMMARY + '?days=' + days, {
+      method: 'GET',
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP Error: ${response.status}`);
-    }
-
-    const result = await response.json();
-    
-    if (result.status === 'error') {
-      throw new Error(result.message);
-    }
-
-    const healthData = result.data.health_daily || [];
-    const workoutsData = result.data.workouts || [];
+    const healthData = data.health_daily || [];
+    const workoutsData = data.workouts || [];
     
     renderTable(healthData, workoutsData);
 
   } catch (err) {
     console.error('Fehler beim Laden der Historie:', err);
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--danger);">Fehler: ${err.message} <br>Läuft der lokale DB-Server auf Port 8765?</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--danger);">Fehler: ${err.message}<br>Läuft der Server auf Port 8765?</td></tr>`;
   }
 }
 
@@ -68,7 +36,7 @@ function renderTable(healthData, workoutsData) {
     return;
   }
 
-  // Create a combined map by date
+  // Combined map by date
   const datesMap = {};
   
   healthData.forEach(h => {
@@ -82,7 +50,6 @@ function renderTable(healthData, workoutsData) {
     datesMap[w.date].workouts.push(w);
   });
 
-  // Sort dates descending
   const sortedDates = Object.keys(datesMap).sort((a, b) => b.localeCompare(a));
 
   const rows = sortedDates.map(date => {
@@ -96,7 +63,7 @@ function renderTable(healthData, workoutsData) {
 
     return `
       <tr>
-        <td style="white-space: nowrap; font-weight: 500;">${formatDateDE(date)}</td>
+        <td style="white-space: nowrap; font-weight: 500;">${formatDateShortDE(date)}</td>
         <td style="color: ${day.hrv_avg && day.hrv_avg < 40 ? 'var(--warning)' : 'inherit'}">${day.hrv_avg != null ? day.hrv_avg : '-'}</td>
         <td style="color: ${day.sleep_score && day.sleep_score < 70 ? 'var(--warning)' : 'inherit'}">${day.sleep_score != null ? day.sleep_score : '-'}</td>
         <td>${day.resting_hr != null ? day.resting_hr : '-'}</td>
@@ -111,8 +78,6 @@ function renderTable(healthData, workoutsData) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('header-date').textContent = formatDateDE(todayISO());
-
   document.getElementById('btn-load-7').addEventListener('click', () => loadHistory(7));
   document.getElementById('btn-load-30').addEventListener('click', () => loadHistory(30));
   document.getElementById('btn-load-90').addEventListener('click', () => loadHistory(90));

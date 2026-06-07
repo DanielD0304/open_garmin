@@ -1,12 +1,12 @@
+/**
+ * Nutrition Page – nutrition.js (ES Module)
+ */
+import { CONFIG, apiFetch, todayISO, generateId, showToast, escapeHtml } from './shared.js';
+
 const state = {
   todayFoodLog: [],
   todayMacros: { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 },
-  goals: {
-    calories: 2500,
-    protein: 150,
-    carbs: 250,
-    fat: 80
-  }
+  goals: { calories: 2500, protein: 150, carbs: 250, fat: 80 },
 };
 
 async function addFoodEntry(entry) {
@@ -23,20 +23,19 @@ async function addFoodEntry(entry) {
   };
 
   try {
-    await apiFetch(CONFIG.ENDPOINTS.ADD_FOOD, {
+    const result = await apiFetch(CONFIG.ENDPOINTS.ADD_FOOD, {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+    // Use server-returned ID if available
+    payload.id = result.id || generateId();
   } catch (err) {
-    console.warn('n8n nicht erreichbar, Eintrag nur lokal gespeichert:', err.message);
-    showToast('⚠️ n8n nicht erreichbar – Eintrag nur lokal gespeichert.', 'warning');
+    console.warn('Server nicht erreichbar, Eintrag nur lokal gespeichert:', err.message);
+    showToast('Server nicht erreichbar – Eintrag nur lokal gespeichert.', 'warning');
+    payload.id = generateId();
   }
 
-  const localEntry = {
-    id: generateId(),
-    ...payload,
-    created_at: new Date().toISOString(),
-  };
+  const localEntry = { ...payload, created_at: new Date().toISOString() };
   state.todayFoodLog.push(localEntry);
   recalcMacros();
   renderFoodLog();
@@ -50,15 +49,18 @@ async function deleteFoodEntry(entryId) {
       body: JSON.stringify({ id: entryId, date: todayISO() }),
     });
   } catch (err) {
-    console.warn('n8n nicht erreichbar, Eintrag nur lokal gelöscht:', err.message);
+    console.warn('Server nicht erreichbar, Eintrag nur lokal geloescht:', err.message);
   }
 
   state.todayFoodLog = state.todayFoodLog.filter(e => e.id !== entryId);
   recalcMacros();
   renderFoodLog();
   renderProgressBars();
-  showToast('🗑️ Eintrag entfernt.', 'info');
+  showToast('Eintrag entfernt.', 'info');
 }
+
+// Make deleteFoodEntry available for onclick handlers
+window.deleteFoodEntry = deleteFoodEntry;
 
 async function fetchTodayFoodLog() {
   try {
@@ -116,7 +118,7 @@ function renderFoodLog() {
         <span>${(entry.carbs_g || 0).toFixed(1)}C</span>
         <span>${(entry.fat_g || 0).toFixed(1)}F</span>
       </div>
-      <button class="food-log__delete" onclick="deleteFoodEntry('${entry.id}')" title="Löschen">×</button>
+      <button class="food-log__delete" onclick="deleteFoodEntry(${entry.id})" title="Löschen">×</button>
     </div>
   `).join('');
 }
@@ -159,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       e.target.reset();
       document.getElementById('food-name').focus();
-      showToast('✅ Lebensmittel hinzugefügt!', 'success');
+      showToast('Lebensmittel hinzugefügt!', 'success');
     });
   }
 
