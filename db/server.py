@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
 from typing import Optional
+from urllib import request as urllib_request, error as urllib_error
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -54,6 +55,7 @@ load_project_env()
 # ── DB Models importieren ────────────────────────────────────────
 
 from db import models  # noqa: E402
+from db.ai_client import generate_ai_report, get_model  # noqa: E402
 
 
 # ── Pydantic Request Models ─────────────────────────────────────
@@ -310,41 +312,140 @@ async def history_summary(days: int = Query(7, ge=1, le=365)):
         return error_response(f"get_summary fehlgeschlagen: {e}", 500)
 
 
+# ── Charts / Daily Overview ──────────────────────────────────────
+
+@app.get("/api/charts/daily-overview")
+async def charts_daily_overview(days: int = Query(14, ge=1, le=365)):
+    try:
+        result = models.get_daily_overview(days)
+        return ok_response(result)
+    except Exception as e:
+        return error_response(f"get_daily_overview fehlgeschlagen: {e}", 500)
+
+
+# ── Food Search (OpenFoodFacts) ──────────────────────────────────
+
+def _map_off_product(product: dict) -> dict:
+    """Maps an OpenFoodFacts product dict to our schema."""
+    nut = product.get("nutriments") or {}
+    return {
+        "food_name": product.get("product_name") or "Unknown",
+        "brand": product.get("brands") or "",
+        "calories": round(nut.get("energy-kcal_100g") or nut.get("energy-kcal") or 0, 1),
+        "protein_g": round(nut.get("proteins_100g") or nut.get("proteins") or 0, 1),
+        "carbs_g": round(nut.get("carbohydrates_100g") or nut.get("carbohydrates") or 0, 1),
+        "fat_g": round(nut.get("fat_100g") or nut.get("fat") or 0, 1),
+        "fiber_g": round(nut.get("fiber_100g") or nut.get("fiber") or 0, 1),
+        "barcode": product.get("code") or "",
+        "image_url": product.get("image_small_url") or "",
+    }
+
+
+@app.get("/api/food/search")
+async def food_search(q: str = Query(..., min_length=1)):
+    """Search OpenFoodFacts for food products."""
+    from urllib.parse import quote
+    url = (
+        f"https://world.openfoodfacts.org/cgi/search.pl"
+        f"?search_terms={quote(q)}"
+        f"&search_simple=1&action=process&json=1&page_size=8"
+        f"&fields=product_name,brands,nutriments,code,image_small_url"
+    )
+    try:
+        req = urllib_request.Request(url, headers={"User-Agent": "OpenGarmin/1.0"})
+        with urllib_request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except (urllib_error.URLError, TimeoutError, ValueError) as e:
+        return error_response(f"OpenFoodFacts search failed: {e}", 502)
+
+    products = data.get("products") or []
+    results = [_map_off_product(p) for p in products if p.get("product_name")]
+    return ok_response(results)
+
+
+@app.get("/api/food/barcode/{barcode}")
+async def food_barcode(barcode: str):
+    """Look up a specific barcode on OpenFoodFacts."""
+    url = (
+        f"https://world.openfoodfacts.org/api/v2/product/{barcode}"
+        f"?fields=product_name,brands,nutriments,code,image_small_url"
+    )
+    try:
+        req = urllib_request.Request(url, headers={"User-Agent": "OpenGarmin/1.0"})
+        with urllib_request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except (urllib_error.URLError, TimeoutError, ValueError) as e:
+        return error_response(f"OpenFoodFacts lookup failed: {e}", 502)
+
+    product = data.get("product")
+    if not product or data.get("status") == 0:
+        return error_response("Product not found", 404)
+
+    return ok_response(_map_off_product(product))
+
+
+# ── Garmin Status ────────────────────────────────────────────────
+
+@app.get("/api/garmin/status")
+async def garmin_status():
+    """Checks if a Garmin session exists and returns sync status."""
+    session_dir = ROOT_DIR / "garmin" / ".garmin_session"
+    session_exists = session_dir.exists() and any(session_dir.iterdir()) if session_dir.exists() else False
+
+    # Get the latest synced date from DB
+    last_sync_date = None
+    try:
+        conn = models.get_connection()
+        row = conn.execute(
+            "SELECT date FROM daily_health_metrics WHERE source = 'garmin' ORDER BY date DESC LIMIT 1"
+        ).fetchone()
+        if row:
+            last_sync_date = dict(row)["date"]
+    except Exception:
+        pass
+
+    return ok_response({
+        "status": "connected" if session_exists else "disconnected",
+        "session_exists": session_exists,
+        "last_sync_date": last_sync_date,
+    })
+
+
 # ── AI Report ────────────────────────────────────────────────────
 
 @app.get("/api/report/generate")
 async def report_generate():
-    """Generiert den AI Coaching Report (Ollama mit Fallback)."""
+    """Generiert den AI Coaching Report (Cloud-API mit Fallback)."""
     try:
-        summary_data = models.get_summary(7)
+        coaching_data = models.get_coaching_context(7)
     except Exception as e:
         return error_response(f"Zusammenfassung fehlgeschlagen: {e}", 500)
 
-    context = build_report_context(summary_data)
-    ollama_report, ollama_error = generate_ollama_report(context)
+    context = build_report_context(coaching_data)
+    report, ai_error = generate_ai_report(context)
 
-    if ollama_report:
+    if report:
         return ok_response({
-            "report": ollama_report,
-            "mode": "ollama",
-            "model": os.environ.get("OLLAMA_MODEL", "gemma2"),
+            "report": report,
+            "mode": "api",
+            "model": get_model(),
         })
 
     return ok_response({
-        "report": build_fallback_report(summary_data),
+        "report": build_fallback_report(coaching_data),
         "mode": "fallback",
         "model": None,
-        "ollama_error": ollama_error,
+        "ai_error": ai_error,
     })
 
 
-# ── Ollama Integration (aus http_server.py uebernommen) ─────────
+# ── Report-Kontext ───────────────────────────────────────────────
 
-def build_report_context(summary_data: dict) -> str:
-    """Baut den Kontext-Text fuer Ollama auf."""
+def build_report_context(coaching_data: dict) -> str:
+    """Baut den Kontext-Text fuer das Modell auf (enriched with nutrition + trends)."""
     lines = ["=== ATHLETIK-DATEN DER LETZTEN 7 TAGE ===", ""]
 
-    avg = summary_data.get("health_averages") or {}
+    avg = coaching_data.get("health_averages") or {}
     if avg:
         lines.append("--- DURCHSCHNITTSWERTE ---")
         if avg.get("avg_hrv") is not None:
@@ -361,7 +462,7 @@ def build_report_context(summary_data: dict) -> str:
             lines.append(f"Schritte/Tag: {round(avg['avg_steps'])}")
         lines.append("")
 
-    health_daily = summary_data.get("health_daily") or []
+    health_daily = coaching_data.get("health_daily") or []
     if health_daily:
         lines.append("--- TAEGLICHE HEALTH-DATEN ---")
         for day in health_daily:
@@ -372,7 +473,7 @@ def build_report_context(summary_data: dict) -> str:
             )
         lines.append("")
 
-    workouts = summary_data.get("workouts") or []
+    workouts = coaching_data.get("workouts") or []
     if workouts:
         lines.append("--- WORKOUTS ---")
         for workout in workouts:
@@ -384,7 +485,7 @@ def build_report_context(summary_data: dict) -> str:
             )
         lines.append("")
 
-    workout_summary = summary_data.get("workout_summary") or {}
+    workout_summary = coaching_data.get("workout_summary") or {}
     if workout_summary:
         lines.append("--- WOCHEN-ZUSAMMENFASSUNG ---")
         total_workouts = workout_summary.get("total_workouts") or 0
@@ -395,64 +496,45 @@ def build_report_context(summary_data: dict) -> str:
             f"Workouts: {total_workouts} | Dauer: {total_duration} min | "
             f"Kalorien: {total_calories} | Avg HR: {round(avg_hr)}"
         )
+        lines.append("")
+
+    # ── Nutrition data ───────────────────────────────────────────
+    nutrition_daily = coaching_data.get("nutrition_daily") or []
+    if nutrition_daily:
+        lines.append("--- ERNAEHRUNG PRO TAG ---")
+        for nd in nutrition_daily:
+            lines.append(
+                f"{nd.get('date')}: {nd.get('total_calories', 0):.0f} kcal | "
+                f"P={nd.get('total_protein_g', 0):.0f}g "
+                f"C={nd.get('total_carbs_g', 0):.0f}g "
+                f"F={nd.get('total_fat_g', 0):.0f}g | "
+                f"{nd.get('meal_count', 0)} Mahlzeiten"
+            )
+        lines.append("")
+
+    # ── Trends ───────────────────────────────────────────────────
+    trends = coaching_data.get("trends") or {}
+    if trends:
+        trend_labels = {"rising": "steigend", "falling": "fallend", "stable": "stabil"}
+        lines.append("--- TRENDS ---")
+        lines.append(f"HRV-Trend: {trend_labels.get(trends.get('hrv_trend', ''), 'stabil')}")
+        lines.append(f"Schlaf-Trend: {trend_labels.get(trends.get('sleep_trend', ''), 'stabil')}")
+        lines.append(f"Stress-Trend: {trend_labels.get(trends.get('stress_trend', ''), 'stabil')}")
+        lines.append("")
+
+    # ── Correlations ─────────────────────────────────────────────
+    correlations = coaching_data.get("correlations") or []
+    if correlations:
+        lines.append("--- ERKANNTE MUSTER ---")
+        for c in correlations:
+            lines.append(f"- {c}")
+        lines.append("")
 
     return "\n".join(lines)
 
 
-def generate_ollama_report(context: str) -> tuple[str | None, str | None]:
-    """Ruft Ollama via HTTP auf und gibt (report, error) zurueck."""
-    from urllib import request as urllib_request, error as urllib_error
-
-    base_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-    model = os.environ.get("OLLAMA_MODEL", "gemma2")
-
-    payload = {
-        "model": model,
-        "prompt": context,
-        "system": (
-            "Du bist ein erfahrener Athletik- und Erholungs-Coach. "
-            "Analysiere die folgenden Trainings- und Gesundheitsdaten und gib "
-            "einen kurzen, praxisnahen Coaching-Report auf Deutsch. "
-            "Beruecksichtige HRV-Trends, Schlafqualitaet, Stresslevel und Trainingsbelastung. "
-            "Gib konkrete Empfehlungen fuer Training, Erholung und Schlaf. "
-            "Halte den Report unter 500 Woertern. Formatiere mit Markdown-Ueberschriften und Aufzaehlungen."
-        ),
-        "stream": False,
-        "options": {"temperature": 0.7, "num_predict": 512},
-    }
-
-    print(f"[Ollama] Sende Anfrage an {base_url} (Modell: {model})...", flush=True)
-
-    request = urllib_request.Request(
-        f"{base_url}/api/generate",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    try:
-        with urllib_request.urlopen(request, timeout=900) as response:
-            raw = response.read().decode("utf-8")
-            print("[Ollama] Antwort erfolgreich erhalten!", flush=True)
-    except urllib_error.HTTPError as e:
-        err_body = e.read().decode("utf-8") if hasattr(e, "read") else ""
-        return None, f"HTTP Error {e.code}: {err_body}"
-    except (urllib_error.URLError, TimeoutError, ValueError) as e:
-        return None, f"Connection/Timeout Error: {e}"
-
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as e:
-        return None, f"JSON Decode Error: {e}"
-
-    report = parsed.get("response")
-    if not isinstance(report, str) or not report.strip():
-        return None, "Ollama hat keinen oder einen leeren Report generiert."
-    return report.strip(), None
-
-
 def build_fallback_report(summary_data: dict) -> str:
-    """Regel-basierter Fallback-Report wenn Ollama nicht verfuegbar."""
+    """Regel-basierter Fallback-Report wenn die AI-API nicht verfuegbar ist."""
     avg = summary_data.get("health_averages") or {}
     workouts = summary_data.get("workouts") or []
     workout_summary = summary_data.get("workout_summary") or {}
@@ -535,10 +617,10 @@ async def legacy_run(payload: dict):
         try:
             summary_data = models.get_summary(7)
             context = build_report_context(summary_data)
-            report, error = generate_ollama_report(context)
+            report, error = generate_ai_report(context)
             if report:
-                return {"status": "ok", "data": {"report": report, "mode": "ollama"}}
-            return {"status": "ok", "data": {"report": build_fallback_report(summary_data), "mode": "fallback", "ollama_error": error}}
+                return {"status": "ok", "data": {"report": report, "mode": "api", "model": get_model()}}
+            return {"status": "ok", "data": {"report": build_fallback_report(summary_data), "mode": "fallback", "ai_error": error}}
         except Exception as e:
             return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 

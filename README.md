@@ -56,11 +56,28 @@ Der Wrapper lauscht auf `http://localhost:8765/run` und wird von den n8n-Workflo
 ```
 Das Skript startet n8n per Docker Compose, importiert die 7 Workflows, veröffentlicht sie und startet n8n danach einmal neu.
 
-### 6. Ollama (für AI-Report)
-```bash
-ollama pull gemma2
-ollama serve
+### 6. AI-Report (kostenlose Cloud-API)
+
+Der Report läuft **nicht mehr über ein lokales Modell (Ollama)**, sondern über eine
+OpenAI-kompatible Cloud-API. Default ist der kostenlose Groq-Tier.
+
+1. API-Key holen: https://console.groq.com/keys (kostenlos, keine Kreditkarte)
+2. In die `.env` eintragen (Vorlage: `.env.example`):
+
+```env
+AI_API_KEY=gsk_...
+AI_BASE_URL=https://api.groq.com/openai/v1
+AI_MODEL=llama-3.3-70b-versatile
 ```
+
+Andere kostenlose Anbieter funktionieren durch bloßes Tauschen von `AI_BASE_URL`
+und `AI_MODEL` (OpenRouter, Google Gemini OpenAI-Compat, Cerebras – siehe `.env.example`).
+
+Ohne gültigen Key liefert der Server weiterhin den regelbasierten Fallback-Report.
+
+> **Datenschutz:** Health-, Workout- und Ernährungsdaten der letzten 7 Tage werden
+> an den gewählten Anbieter gesendet. Free-Tiers nutzen Eingaben je nach Anbieter
+> ggf. zur Modellverbesserung.
 
 ### 7. Frontend öffnen
 `frontend/index.html` im Browser öffnen.

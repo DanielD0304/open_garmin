@@ -53,6 +53,15 @@
             </h2>
           </div>
 
+          <!-- Food Search -->
+          <div class="food-search-wrapper">
+            <div class="food-search-input-row">
+              <input class="form-input food-search-input" type="text" id="food-search" placeholder="Lebensmittel suchen (z.B. Skyr)..." autocomplete="off">
+              <button class="btn btn--secondary btn--sm" id="barcode-scan-btn" type="button">📷 Barcode scannen</button>
+            </div>
+            <div class="food-search-results" id="food-search-results"></div>
+          </div>
+
           <form id="food-form" autocomplete="off">
             <div class="form-row">
               <div class="form-group">
@@ -136,6 +145,11 @@
             <div class="progress-label"><span>Fett</span><span id="progress-fat-text">0 / 80 g</span></div>
             <div class="progress-track"><div class="progress-fill fill-fat" id="progress-fat-fill" style="width: 0%"></div></div>
           </div>
+
+          <!-- Macro Doughnut Chart -->
+          <div class="chart-container chart-container--donut">
+            <canvas id="chart-macros"></canvas>
+          </div>
         </section>
 
         <!-- Heutiges Food-Log (Volle Breite) -->
@@ -159,6 +173,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script type="module" src="shared.js"></script>
   <script type="module" src="nutrition.js"></script>
 </body>

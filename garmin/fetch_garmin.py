@@ -79,16 +79,20 @@ def ensure_session_dir():
 
 # ── Garmin Login mit Session-Cache ───────────────────────────────
 
-def get_garmin_client():
+def get_garmin_client(max_retries: int = 2):
     """
     Erstellt einen authentifizierten Garmin-Client.
 
     1. Versucht zuerst, ein gecachtes Session-Token zu laden.
-    2. Falls das fehlschlaegt, login mit Email/Passwort.
+    2. Falls abgelaufen: automatischer Re-Login mit Email/Passwort.
     3. Speichert das neue Token fuer zukuenftige Aufrufe.
+    4. Bei Rate-Limiting: exponentielles Backoff (max 2 Retries).
 
-    Bei 2FA/Captcha-Fehlern wird ein strukturierter JSON-Fehler ausgegeben.
+    Bei 2FA/Captcha-Fehlern wird ein strukturierter JSON-Fehler ausgegeben
+    mit `requires_action: "2fa"` fuer Frontend-Erkennung.
     """
+    import time
+
     try:
         from garminconnect import Garmin
     except ImportError:
@@ -106,34 +110,64 @@ def get_garmin_client():
     # 1. Versuch: Session-Token laden
     try:
         garmin.login(SESSION_DIR)
-        return garmin
+        # Validierung: teste ob das Token noch gueltig ist
+        try:
+            garmin.get_full_name()
+            return garmin
+        except Exception:
+            print("[Garmin] Gecachtes Token abgelaufen, versuche Re-Login...", file=sys.stderr)
     except Exception:
-        pass  # Token nicht vorhanden oder abgelaufen
+        pass  # Token nicht vorhanden oder beschaedigt
 
-    # 2. Versuch: Frischer Login
-    try:
-        garmin.login()
-        # Session-Token fuer naechstes Mal speichern
-        garmin.garth.dump(SESSION_DIR)
-        return garmin
-    except Exception as e:
-        error_msg = str(e).lower()
-        if any(keyword in error_msg for keyword in ["captcha", "2fa", "mfa", "verification"]):
-            output_error(
-                "2FA/Captcha erforderlich. Bitte manuell bei Garmin Connect "
-                "einloggen oder die Daten manuell im Dashboard eingeben.",
-                code="2fa_required"
-            )
-        elif "rate" in error_msg or "limit" in error_msg or "429" in error_msg:
-            output_error(
-                "Rate-Limit erreicht. Bitte spaeter erneut versuchen.",
-                code="rate_limited"
-            )
-        else:
+    # 2. Versuch: Frischer Login (mit Retry bei Rate-Limiting)
+    for attempt in range(max_retries + 1):
+        try:
+            garmin.login()
+            # Session-Token fuer naechstes Mal speichern
+            garmin.garth.dump(SESSION_DIR)
+            print("[Garmin] Neues Session-Token gespeichert.", file=sys.stderr)
+            return garmin
+        except Exception as e:
+            error_msg = str(e).lower()
+
+            # 2FA/Captcha – kein Retry moeglich
+            if any(kw in error_msg for kw in ["captcha", "2fa", "mfa", "verification"]):
+                output_error(
+                    "2FA/Captcha erforderlich. Bitte manuell bei Garmin Connect "
+                    "einloggen oder die Daten manuell im Dashboard eingeben.",
+                    code="2fa_required"
+                )
+
+            # Rate-Limiting – Backoff und Retry
+            if "rate" in error_msg or "limit" in error_msg or "429" in error_msg:
+                if attempt < max_retries:
+                    wait = 2 ** (attempt + 1)  # 2s, 4s
+                    print(f"[Garmin] Rate-Limited. Warte {wait}s... (Versuch {attempt + 1}/{max_retries})", file=sys.stderr)
+                    time.sleep(wait)
+                    continue
+                output_error(
+                    "Rate-Limit erreicht nach mehreren Versuchen. Bitte spaeter erneut versuchen.",
+                    code="rate_limited"
+                )
+
+            # Anderer Fehler – kein Retry
             output_error(
                 f"Garmin Login fehlgeschlagen: {e}",
                 code="login_failed"
             )
+
+
+def check_session_status():
+    """Prueft den Status der Garmin-Session ohne Login-Versuch."""
+    session_files = []
+    if os.path.exists(SESSION_DIR):
+        session_files = os.listdir(SESSION_DIR)
+
+    return {
+        "session_exists": len(session_files) > 0,
+        "session_dir": SESSION_DIR,
+        "session_files": len(session_files),
+    }
 
 
 # ── Daten abrufen ────────────────────────────────────────────────

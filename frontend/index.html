@@ -128,10 +128,42 @@
           </div>
         </section>
 
+        <!-- ─── HRV & Sleep Trend Chart ──────────────────── -->
+        <section class="card dashboard-grid__report">
+          <div class="card__header">
+            <h2 class="card__title">
+              <span class="card__title-icon">📈</span>
+              HRV & Sleep Trend
+            </h2>
+            <div class="chart-period-btns" id="chart-period-btns">
+              <button class="chart-period-btn" data-days="7" type="button">7d</button>
+              <button class="chart-period-btn active" data-days="14" type="button">14d</button>
+              <button class="chart-period-btn" data-days="30" type="button">30d</button>
+            </div>
+          </div>
+          <div class="chart-container">
+            <canvas id="chart-hrv-sleep"></canvas>
+          </div>
+        </section>
+
+        <!-- ─── Kalorien-Bilanz Chart ────────────────────── -->
+        <section class="card dashboard-grid__report">
+          <div class="card__header">
+            <h2 class="card__title">
+              <span class="card__title-icon">🔥</span>
+              Kalorien-Bilanz
+            </h2>
+          </div>
+          <div class="chart-container">
+            <canvas id="chart-calories"></canvas>
+          </div>
+        </section>
+
       </main>
     </div> <!-- Close main-content -->
   </div> <!-- Close app-wrapper -->
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script type="module" src="shared.js"></script>
   <script type="module" src="app.js"></script>
 </body>

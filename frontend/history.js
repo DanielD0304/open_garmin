@@ -4,6 +4,12 @@
  * FIX: Benutzt jetzt shared.js statt eigener Duplikate.
  */
 import { CONFIG, apiFetch, todayISO, formatDateShortDE } from './shared.js';
+import {
+  initChartDefaults, createTrendChart, createBarChart,
+  destroyChart, CHART_COLORS,
+} from './charts.js';
+
+const histCharts = { hrv: null, sleep: null, stress: null, training: null };
 
 async function loadHistory(days) {
   const tbody = document.getElementById('history-tbody');
@@ -21,6 +27,7 @@ async function loadHistory(days) {
     const workoutsData = data.workouts || [];
     
     renderTable(healthData, workoutsData);
+    updateHistoryCharts(healthData, workoutsData);
 
   } catch (err) {
     console.error('Fehler beim Laden der Historie:', err);
@@ -77,7 +84,78 @@ function renderTable(healthData, workoutsData) {
   tbody.innerHTML = rows.join('');
 }
 
+// ── Update 4 mini charts with history data ────────────────────────
+function updateHistoryCharts(healthData, workoutsData) {
+  // Sort chronologically for charts
+  const sorted = [...healthData].sort((a, b) => a.date.localeCompare(b.date));
+  const labels = sorted.map(d => {
+    const parts = d.date.split('-');
+    return `${parts[2]}.${parts[1]}`;
+  });
+
+  // Destroy existing charts
+  Object.keys(histCharts).forEach(k => {
+    destroyChart(histCharts[k]);
+    histCharts[k] = null;
+  });
+
+  const smallChartOpts = {
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { maxRotation: 0, autoSkipPadding: 16, font: { size: 10 } } },
+      y: { ticks: { font: { size: 10 } } },
+    },
+  };
+
+  // HRV Trend
+  histCharts.hrv = createTrendChart('chart-hist-hrv', labels, [{
+    label: 'HRV',
+    data: sorted.map(d => d.hrv_avg ?? null),
+    borderColor: CHART_COLORS.hrv,
+    backgroundColor: CHART_COLORS.hrv + '18',
+    fill: true,
+  }], smallChartOpts);
+
+  // Sleep Score
+  histCharts.sleep = createTrendChart('chart-hist-sleep', labels, [{
+    label: 'Sleep',
+    data: sorted.map(d => d.sleep_score ?? null),
+    borderColor: CHART_COLORS.sleep,
+    backgroundColor: CHART_COLORS.sleep + '18',
+    fill: true,
+  }], smallChartOpts);
+
+  // Stress Level
+  histCharts.stress = createTrendChart('chart-hist-stress', labels, [{
+    label: 'Stress',
+    data: sorted.map(d => d.stress_avg ?? null),
+    borderColor: CHART_COLORS.stress,
+    backgroundColor: CHART_COLORS.stress + '18',
+    fill: true,
+  }], smallChartOpts);
+
+  // Trainingsvolumen (count workouts per date)
+  const workoutCountByDate = {};
+  workoutsData.forEach(w => {
+    workoutCountByDate[w.date] = (workoutCountByDate[w.date] || 0) + 1;
+  });
+  histCharts.training = createBarChart('chart-hist-training', labels, [{
+    label: 'Workouts',
+    data: sorted.map(d => workoutCountByDate[d.date] || 0),
+    backgroundColor: CHART_COLORS.steps + 'aa',
+    hoverBackgroundColor: CHART_COLORS.steps,
+  }], {
+    ...smallChartOpts,
+    scales: {
+      ...smallChartOpts.scales,
+      y: { ...smallChartOpts.scales.y, beginAtZero: true, ticks: { stepSize: 1, font: { size: 10 } } },
+    },
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  initChartDefaults();
+
   document.getElementById('btn-load-7').addEventListener('click', () => loadHistory(7));
   document.getElementById('btn-load-30').addEventListener('click', () => loadHistory(30));
   document.getElementById('btn-load-90').addEventListener('click', () => loadHistory(90));

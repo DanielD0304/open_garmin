@@ -27,7 +27,14 @@ async function generateReport() {
 
     loading.classList.remove('is-active');
     output.innerHTML = formatReportOutput(data.report || data.message || 'Kein Report erhalten.');
-    showToast('Report generiert!', 'success');
+    updateModelBadge(data);
+
+    if (data.mode === 'fallback') {
+      showToast('AI-API nicht erreichbar – Regel-Report angezeigt.', 'error');
+      if (data.ai_error) console.warn('[AI]', data.ai_error);
+    } else {
+      showToast('Report generiert!', 'success');
+    }
   } catch (err) {
     loading.classList.remove('is-active');
     output.textContent = 'Fehler: ' + err.message;
@@ -37,6 +44,14 @@ async function generateReport() {
     setButtonLoading('generate-report-btn', false);
     btn.disabled = false;
   }
+}
+
+function updateModelBadge(data) {
+  const badge = document.getElementById('report-model-badge');
+  if (!badge) return;
+  badge.textContent = data.mode === 'fallback'
+    ? 'Fallback (regelbasiert)'
+    : (data.model || 'Cloud-API');
 }
 
 function formatReportOutput(text) {

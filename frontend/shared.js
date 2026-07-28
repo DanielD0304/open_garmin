@@ -21,9 +21,12 @@ export const CONFIG = {
     GET_HEALTH:      '/api/health/today',
     GENERATE_REPORT: '/api/report/generate',
     GET_SUMMARY:     '/api/history/summary',
+    DAILY_OVERVIEW:  '/api/charts/daily-overview',
+    FOOD_SEARCH:     '/api/food/search',
+    FOOD_BARCODE:    '/api/food/barcode',
   },
   TIMEOUT_DEFAULT: 60_000,
-  TIMEOUT_AI:     600_000,
+  TIMEOUT_AI:      90_000,
   TOAST_DURATION:  4_000,
 };
 

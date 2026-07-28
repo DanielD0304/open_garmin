@@ -1,525 +1,135 @@
 [
   {
-    "name": "Coach – Nutrition Add",
-    "id": "coach-nutrition-add",
-    "active": true,
+    "name": "Coach – Daily Garmin Sync (Cron)",
     "nodes": [
       {
         "parameters": {
-          "httpMethod": "POST",
-          "path": "nutrition/add",
-          "responseMode": "responseNode",
-          "options": {}
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 6 * * *"
+              }
+            ]
+          }
         },
-        "id": "a1000001-0001-0001-0001-000000000001",
-        "name": "Webhook",
-        "type": "n8n-nodes-base.webhook",
-        "typeVersion": 2,
-        "position": [240, 300],
-        "webhookId": "nutrition-add"
+        "id": "cron-trigger",
+        "name": "Daily 06:00 Trigger",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [250, 300]
       },
       {
         "parameters": {
-          "method": "POST",
-          "url": "http://host.docker.internal:8765/run",
+          "url": "http://localhost:8765/api/garmin/sync",
           "sendBody": true,
           "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ action: 'add_food', params: { date: $json.body.date, meal_label: $json.body.meal_label || 'snack', food_name: $json.body.food_name, amount_g: $json.body.amount_g || 0, calories: $json.body.calories || 0, protein_g: $json.body.protein_g || 0, carbs_g: $json.body.carbs_g || 0, fat_g: $json.body.fat_g || 0, fiber_g: $json.body.fiber_g || 0 } }) }}",
-          "options": {}
+          "jsonBody": "{ \"date\": \"={{ $now.format('yyyy-MM-dd') }}\" }",
+          "options": {
+            "timeout": 120000
+          }
         },
-        "id": "a1000001-0001-0001-0001-000000000002",
-        "name": "Execute DB API",
+        "id": "garmin-sync-request",
+        "name": "Sync Garmin Data",
         "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4,
+        "typeVersion": 4.2,
         "position": [480, 300]
       },
       {
         "parameters": {
-          "jsCode": "const result = $input.first().json;\nreturn [{ json: result.data || result }];"
-        },
-        "id": "a1000001-0001-0001-0001-000000000003",
-        "name": "Parse JSON",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [700, 300]
-      },
-      {
-        "parameters": {
-          "respondWith": "json",
-          "responseBody": "={{ JSON.stringify($json) }}",
-          "options": {
-            "responseHeaders": {
-              "entries": [
-                { "name": "Access-Control-Allow-Origin", "value": "*" }
-              ]
-            }
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "condition-check",
+                "leftValue": "={{ $json.status }}",
+                "rightValue": "ok",
+                "operator": {
+                  "type": "string",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
           }
         },
-        "id": "a1000001-0001-0001-0001-000000000004",
-        "name": "Respond",
-        "type": "n8n-nodes-base.respondToWebhook",
+        "id": "check-result",
+        "name": "Sync OK?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2,
+        "position": [710, 300]
+      },
+      {
+        "parameters": {},
+        "id": "success-noop",
+        "name": "Success (No Action)",
+        "type": "n8n-nodes-base.noOp",
         "typeVersion": 1,
-        "position": [920, 300]
+        "position": [940, 200]
+      },
+      {
+        "parameters": {},
+        "id": "failure-noop",
+        "name": "Failure (Log Only)",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [940, 400]
       }
     ],
     "connections": {
-      "Webhook": { "main": [[{ "node": "Execute DB API", "type": "main", "index": 0 }]] },
-      "Execute DB API": { "main": [[{ "node": "Parse JSON", "type": "main", "index": 0 }]] },
-      "Parse JSON": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+      "Daily 06:00 Trigger": {
+        "main": [
+          [
+            {
+              "node": "Sync Garmin Data",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Sync Garmin Data": {
+        "main": [
+          [
+            {
+              "node": "Sync OK?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Sync OK?": {
+        "main": [
+          [
+            {
+              "node": "Success (No Action)",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Failure (Log Only)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
     },
-    "settings": { "executionOrder": "v1" }
-  },
-
-  {
-    "name": "Coach – Nutrition Delete",
-    "id": "coach-nutrition-delete",
     "active": true,
-    "nodes": [
-      {
-        "parameters": {
-          "httpMethod": "POST",
-          "path": "nutrition/delete",
-          "responseMode": "responseNode",
-          "options": {}
-        },
-        "id": "a1000002-0001-0001-0001-000000000001",
-        "name": "Webhook",
-        "type": "n8n-nodes-base.webhook",
-        "typeVersion": 2,
-        "position": [240, 300],
-        "webhookId": "nutrition-delete"
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "http://host.docker.internal:8765/run",
-          "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ action: 'delete_food', params: { id: $json.body.id } }) }}",
-          "options": {}
-        },
-        "id": "a1000002-0001-0001-0001-000000000002",
-        "name": "Execute DB API",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4,
-        "position": [480, 300]
-      },
-      {
-        "parameters": {
-          "jsCode": "const result = $input.first().json;\nreturn [{ json: result.data || result }];"
-        },
-        "id": "a1000002-0001-0001-0001-000000000003",
-        "name": "Parse JSON",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [700, 300]
-      },
-      {
-        "parameters": {
-          "respondWith": "json",
-          "responseBody": "={{ JSON.stringify($json) }}",
-          "options": {
-            "responseHeaders": {
-              "entries": [
-                { "name": "Access-Control-Allow-Origin", "value": "*" }
-              ]
-            }
-          }
-        },
-        "id": "a1000002-0001-0001-0001-000000000004",
-        "name": "Respond",
-        "type": "n8n-nodes-base.respondToWebhook",
-        "typeVersion": 1,
-        "position": [920, 300]
-      }
-    ],
-    "connections": {
-      "Webhook": { "main": [[{ "node": "Execute DB API", "type": "main", "index": 0 }]] },
-      "Execute DB API": { "main": [[{ "node": "Parse JSON", "type": "main", "index": 0 }]] },
-      "Parse JSON": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+    "settings": {
+      "executionOrder": "v1"
     },
-    "settings": { "executionOrder": "v1" }
-  },
-
-  {
-    "name": "Coach – Nutrition Today",
-    "id": "coach-nutrition-today",
-    "active": true,
-    "nodes": [
+    "tags": [
       {
-        "parameters": {
-          "httpMethod": "GET",
-          "path": "nutrition/today",
-          "responseMode": "responseNode",
-          "options": {}
-        },
-        "id": "a1000003-0001-0001-0001-000000000001",
-        "name": "Webhook",
-        "type": "n8n-nodes-base.webhook",
-        "typeVersion": 2,
-        "position": [240, 300],
-        "webhookId": "nutrition-today"
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "http://host.docker.internal:8765/run",
-          "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ action: 'get_food_log', params: { date: $json.query.date || new Date().toISOString().split('T')[0] } }) }}",
-          "options": {}
-        },
-        "id": "a1000003-0001-0001-0001-000000000002",
-        "name": "Execute DB API",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4,
-        "position": [480, 300]
-      },
-      {
-        "parameters": {
-          "jsCode": "const result = $input.first().json;\nreturn [{ json: result.data || result }];"
-        },
-        "id": "a1000003-0001-0001-0001-000000000003",
-        "name": "Parse JSON",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [700, 300]
-      },
-      {
-        "parameters": {
-          "respondWith": "json",
-          "responseBody": "={{ JSON.stringify($json) }}",
-          "options": {
-            "responseHeaders": {
-              "entries": [
-                { "name": "Access-Control-Allow-Origin", "value": "*" }
-              ]
-            }
-          }
-        },
-        "id": "a1000003-0001-0001-0001-000000000004",
-        "name": "Respond",
-        "type": "n8n-nodes-base.respondToWebhook",
-        "typeVersion": 1,
-        "position": [920, 300]
+        "name": "garmin-cron"
       }
-    ],
-    "connections": {
-      "Webhook": { "main": [[{ "node": "Execute DB API", "type": "main", "index": 0 }]] },
-      "Execute DB API": { "main": [[{ "node": "Parse JSON", "type": "main", "index": 0 }]] },
-      "Parse JSON": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
-    },
-    "settings": { "executionOrder": "v1" }
-  },
-
-  {
-    "name": "Coach – Garmin Sync",
-    "id": "coach-garmin-sync",
-    "active": true,
-    "nodes": [
-      {
-        "parameters": {
-          "httpMethod": "POST",
-          "path": "garmin/sync",
-          "responseMode": "responseNode",
-          "options": {}
-        },
-        "id": "a1000004-0001-0001-0001-000000000001",
-        "name": "Webhook",
-        "type": "n8n-nodes-base.webhook",
-        "typeVersion": 2,
-        "position": [240, 300],
-        "webhookId": "garmin-sync"
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "http://host.docker.internal:8765/run",
-          "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ action: 'fetch_garmin', params: { date: $json.body.date || new Date().toISOString().split('T')[0] } }) }}",
-          "options": {}
-        },
-        "id": "a1000004-0001-0001-0001-000000000002",
-        "name": "Fetch Garmin",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4,
-        "position": [480, 300]
-      },
-      {
-        "parameters": {
-          "jsCode": "const garminResult = $input.first().json;\n\nif (garminResult.status === 'error') {\n  return [{ json: garminResult }];\n}\n\nconst d = garminResult.data;\nconst h = d.health;\n\nreturn [{\n  json: {\n    ...garminResult,\n    _healthRequest: {\n      action: 'add_health',\n      params: {\n        date: d.date,\n        source: 'garmin',\n        hrv_avg: h.hrv_avg,\n        hrv_status: h.hrv_status,\n        sleep_score: h.sleep_score,\n        sleep_hours: h.sleep_hours,\n        resting_hr: h.resting_hr,\n        body_battery_high: h.body_battery_high,\n        body_battery_low: h.body_battery_low,\n        stress_avg: h.stress_avg,\n        steps: h.steps,\n        active_calories: h.active_calories\n      }\n    }\n  }\n}];"
-        },
-        "id": "a1000004-0001-0001-0001-000000000003",
-        "name": "Parse Garmin Data",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [700, 300]
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "http://host.docker.internal:8765/run",
-          "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify($json._healthRequest) }}",
-          "options": {}
-        },
-        "id": "a1000004-0001-0001-0001-000000000004",
-        "name": "Save Health to DB",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4,
-        "position": [920, 300]
-      },
-      {
-        "parameters": {
-          "jsCode": "// Originale Garmin-Daten fuer Response vorbereiten\nconst prev = $('Parse Garmin Data').first().json;\ndelete prev._healthCmd;\nreturn [{ json: prev }];"
-        },
-        "id": "a1000004-0001-0001-0001-000000000005",
-        "name": "Prepare Response",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [1140, 300]
-      },
-      {
-        "parameters": {
-          "respondWith": "json",
-          "responseBody": "={{ JSON.stringify($json.data || $json) }}",
-          "options": {
-            "responseHeaders": {
-              "entries": [
-                { "name": "Access-Control-Allow-Origin", "value": "*" }
-              ]
-            }
-          }
-        },
-        "id": "a1000004-0001-0001-0001-000000000006",
-        "name": "Respond",
-        "type": "n8n-nodes-base.respondToWebhook",
-        "typeVersion": 1,
-        "position": [1360, 300]
-      }
-    ],
-    "connections": {
-      "Webhook": { "main": [[{ "node": "Fetch Garmin", "type": "main", "index": 0 }]] },
-      "Fetch Garmin": { "main": [[{ "node": "Parse Garmin Data", "type": "main", "index": 0 }]] },
-      "Parse Garmin Data": { "main": [[{ "node": "Save Health to DB", "type": "main", "index": 0 }]] },
-      "Save Health to DB": { "main": [[{ "node": "Prepare Response", "type": "main", "index": 0 }]] },
-      "Prepare Response": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
-    },
-    "settings": { "executionOrder": "v1" }
-  },
-
-  {
-    "name": "Coach – Health Manual",
-    "id": "coach-health-manual",
-    "active": true,
-    "nodes": [
-      {
-        "parameters": {
-          "httpMethod": "POST",
-          "path": "health/manual",
-          "responseMode": "responseNode",
-          "options": {}
-        },
-        "id": "a1000005-0001-0001-0001-000000000001",
-        "name": "Webhook",
-        "type": "n8n-nodes-base.webhook",
-        "typeVersion": 2,
-        "position": [240, 300],
-        "webhookId": "health-manual"
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "http://host.docker.internal:8765/run",
-          "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ action: 'add_health', params: { date: $json.body.date || new Date().toISOString().split('T')[0], source: 'manual', hrv_avg: $json.body.hrv_avg, hrv_status: $json.body.hrv_status, sleep_score: $json.body.sleep_score, sleep_hours: $json.body.sleep_hours, resting_hr: $json.body.resting_hr, body_battery_high: $json.body.body_battery_high, body_battery_low: $json.body.body_battery_low, stress_avg: $json.body.stress_avg, steps: $json.body.steps, active_calories: $json.body.active_calories } }) }}",
-          "options": {}
-        },
-        "id": "a1000005-0001-0001-0001-000000000002",
-        "name": "Execute DB API",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4,
-        "position": [480, 300]
-      },
-      {
-        "parameters": {
-          "jsCode": "const result = $input.first().json;\nreturn [{ json: result.data || result }];"
-        },
-        "id": "a1000005-0001-0001-0001-000000000003",
-        "name": "Parse JSON",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [700, 300]
-      },
-      {
-        "parameters": {
-          "respondWith": "json",
-          "responseBody": "={{ JSON.stringify($json) }}",
-          "options": {
-            "responseHeaders": {
-              "entries": [
-                { "name": "Access-Control-Allow-Origin", "value": "*" }
-              ]
-            }
-          }
-        },
-        "id": "a1000005-0001-0001-0001-000000000004",
-        "name": "Respond",
-        "type": "n8n-nodes-base.respondToWebhook",
-        "typeVersion": 1,
-        "position": [920, 300]
-      }
-    ],
-    "connections": {
-      "Webhook": { "main": [[{ "node": "Execute DB API", "type": "main", "index": 0 }]] },
-      "Execute DB API": { "main": [[{ "node": "Parse JSON", "type": "main", "index": 0 }]] },
-      "Parse JSON": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
-    },
-    "settings": { "executionOrder": "v1" }
-  },
-
-  {
-    "name": "Coach – Health Today",
-    "id": "coach-health-today",
-    "active": true,
-    "nodes": [
-      {
-        "parameters": {
-          "httpMethod": "GET",
-          "path": "health/today",
-          "responseMode": "responseNode",
-          "options": {}
-        },
-        "id": "a1000006-0001-0001-0001-000000000001",
-        "name": "Webhook",
-        "type": "n8n-nodes-base.webhook",
-        "typeVersion": 2,
-        "position": [240, 300],
-        "webhookId": "health-today"
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "http://host.docker.internal:8765/run",
-          "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ action: 'get_health', params: { date: $json.query.date || new Date().toISOString().split('T')[0] } }) }}",
-          "options": {}
-        },
-        "id": "a1000006-0001-0001-0001-000000000002",
-        "name": "Execute DB API",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4,
-        "position": [480, 300]
-      },
-      {
-        "parameters": {
-          "jsCode": "const result = $input.first().json;\nreturn [{ json: result.data || result }];"
-        },
-        "id": "a1000006-0001-0001-0001-000000000003",
-        "name": "Parse JSON",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [700, 300]
-      },
-      {
-        "parameters": {
-          "respondWith": "json",
-          "responseBody": "={{ JSON.stringify($json) }}",
-          "options": {
-            "responseHeaders": {
-              "entries": [
-                { "name": "Access-Control-Allow-Origin", "value": "*" }
-              ]
-            }
-          }
-        },
-        "id": "a1000006-0001-0001-0001-000000000004",
-        "name": "Respond",
-        "type": "n8n-nodes-base.respondToWebhook",
-        "typeVersion": 1,
-        "position": [920, 300]
-      }
-    ],
-    "connections": {
-      "Webhook": { "main": [[{ "node": "Execute DB API", "type": "main", "index": 0 }]] },
-      "Execute DB API": { "main": [[{ "node": "Parse JSON", "type": "main", "index": 0 }]] },
-      "Parse JSON": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
-    },
-    "settings": { "executionOrder": "v1" }
-  },
-
-  {
-    "name": "Coach – Report Generate",
-    "id": "coach-report-generate",
-    "active": true,
-    "nodes": [
-      {
-        "parameters": {
-          "httpMethod": "GET",
-          "path": "report/generate",
-          "responseMode": "responseNode",
-          "options": {}
-        },
-        "id": "a1000007-0001-0001-0001-000000000001",
-        "name": "Webhook",
-        "type": "n8n-nodes-base.webhook",
-        "typeVersion": 2,
-        "position": [240, 300],
-        "webhookId": "report-generate"
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "http://host.docker.internal:8765/run",
-          "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ action: 'generate_report', params: { days: 7 } }) }}",
-          "options": {}
-        },
-        "id": "a1000007-0001-0001-0001-000000000002",
-        "name": "Generate AI Report",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4,
-        "position": [480, 300]
-      },
-      {
-        "parameters": {
-          "jsCode": "const result = $input.first().json;\nreturn [{ json: result.data || result }];"
-        },
-        "id": "a1000007-0001-0001-0001-000000000003",
-        "name": "Extract Report",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [700, 300]
-      },
-      {
-        "parameters": {
-          "respondWith": "json",
-          "responseBody": "={{ JSON.stringify($json) }}",
-          "options": {
-            "responseHeaders": {
-              "entries": [
-                { "name": "Access-Control-Allow-Origin", "value": "*" }
-              ]
-            }
-          }
-        },
-        "id": "a1000007-0001-0001-0001-000000000004",
-        "name": "Respond",
-        "type": "n8n-nodes-base.respondToWebhook",
-        "typeVersion": 1,
-        "position": [920, 300]
-      }
-    ],
-    "connections": {
-      "Webhook": { "main": [[{ "node": "Generate AI Report", "type": "main", "index": 0 }]] },
-      "Generate AI Report": { "main": [[{ "node": "Extract Report", "type": "main", "index": 0 }]] },
-      "Extract Report": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
-    },
-    "settings": { "executionOrder": "v1" }
+    ]
   }
 ]

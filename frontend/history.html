@@ -78,6 +78,42 @@
       <!-- ═══ History Grid ═══════════════════════════════════════ -->
       <main class="dashboard-grid">
 
+      <!-- ─── Trend Charts (2x2 Grid) ───────────────── -->
+      <section class="card dashboard-grid__report">
+        <div class="card__header">
+          <h2 class="card__title">
+            <span class="card__title-icon">📉</span>
+            Trendübersicht
+          </h2>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-grid__item">
+            <h3 class="chart-grid__title">HRV Trend</h3>
+            <div class="chart-container chart-container--sm">
+              <canvas id="chart-hist-hrv"></canvas>
+            </div>
+          </div>
+          <div class="chart-grid__item">
+            <h3 class="chart-grid__title">Sleep Score</h3>
+            <div class="chart-container chart-container--sm">
+              <canvas id="chart-hist-sleep"></canvas>
+            </div>
+          </div>
+          <div class="chart-grid__item">
+            <h3 class="chart-grid__title">Stress Level</h3>
+            <div class="chart-container chart-container--sm">
+              <canvas id="chart-hist-stress"></canvas>
+            </div>
+          </div>
+          <div class="chart-grid__item">
+            <h3 class="chart-grid__title">Trainingsvolumen</h3>
+            <div class="chart-container chart-container--sm">
+              <canvas id="chart-hist-training"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- ─── Historische Daten ──────────────────────── -->
       <section class="card history-section">
         <div class="card__header">
@@ -118,6 +154,7 @@
     </div> <!-- Close main-content -->
   </div> <!-- Close app-wrapper -->
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script type="module" src="shared.js"></script>
   <script type="module" src="history.js"></script>
 </body>
