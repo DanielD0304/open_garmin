@@ -14,6 +14,7 @@ import json
 import os
 import sys
 from contextlib import asynccontextmanager
+from hmac import compare_digest
 from datetime import date
 from pathlib import Path
 from typing import Optional
@@ -99,11 +100,19 @@ class GarminSyncRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup/Shutdown: DB-Verbindung verwalten."""
-    # Startup: Verbindung wird lazy bei erstem Zugriff erstellt
+    """Startup/Shutdown: Migrationen anwenden, DB-Verbindungen verwalten."""
+    # Startup: ausstehende Schema-Migrationen anwenden
+    from db.init_db import init_database
+
+    try:
+        init_database(models.DB_PATH, verbose=False)
+    except Exception as e:
+        print(f"[DB Warn] Migration fehlgeschlagen: {e}", file=sys.stderr, flush=True)
+
     yield
-    # Shutdown: Verbindung schliessen
-    models.close_connection()
+
+    # Shutdown: alle Thread-Verbindungen schliessen
+    models.close_all_connections()
 
 
 # ── FastAPI App ──────────────────────────────────────────────────
@@ -114,12 +123,61 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+def allowed_origins() -> list[str]:
+    """
+    Erlaubte Browser-Origins. Default: nur lokal.
+
+    Vorher stand hier ["*"] - zusammen mit Bind auf 0.0.0.0 und fehlender
+    Auth konnte jeder im selben Netz Gesundheitsdaten lesen und schreiben.
+    """
+    configured = os.environ.get("ALLOWED_ORIGINS", "").strip()
+    if configured:
+        return [o.strip() for o in configured.split(",") if o.strip()]
+    return [
+        f"http://{host}:{port}"
+        for host in ("localhost", "127.0.0.1")
+        for port in (8765, 8000, 5678)
+    ]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=allowed_origins(),
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
+
+
+# ── Optionale Token-Auth ─────────────────────────────────────────
+
+PUBLIC_PATHS = ("/api/healthz",)
+
+
+@app.middleware("http")
+async def require_token(request, call_next):
+    """
+    Prueft ein Bearer-Token, wenn API_TOKEN gesetzt ist.
+
+    Ohne API_TOKEN (Default) aendert sich nichts - lokal soll nichts im Weg
+    stehen. Wer den Server ueber localhost hinaus oeffnet, setzt API_TOKEN
+    und schickt 'Authorization: Bearer <token>' oder 'X-API-Key: <token>'.
+    Das ist bewusst kein Multi-User-Login, sondern ein Riegel vor der Tuer.
+    """
+    token = os.environ.get("API_TOKEN", "").strip()
+    path = request.url.path
+
+    if token and path.startswith("/api/") and path not in PUBLIC_PATHS:
+        header = request.headers.get("authorization", "")
+        provided = (
+            header[7:].strip() if header.lower().startswith("bearer ")
+            else request.headers.get("x-api-key", "").strip()
+        )
+        if not compare_digest(provided, token):
+            return JSONResponse(
+                {"status": "error", "message": "Nicht autorisiert"}, status_code=401
+            )
+
+    return await call_next(request)
 
 
 # ── API-Wrapper (konsistente JSON-Responses) ─────────────────────
@@ -142,7 +200,7 @@ async def healthcheck():
 # ── Nutrition Endpoints ──────────────────────────────────────────
 
 @app.post("/api/nutrition/add")
-async def nutrition_add(req: AddFoodRequest):
+def nutrition_add(req: AddFoodRequest):
     try:
         result = models.add_food(
             food_name=req.food_name,
@@ -161,7 +219,7 @@ async def nutrition_add(req: AddFoodRequest):
 
 
 @app.post("/api/nutrition/delete")
-async def nutrition_delete(req: DeleteFoodRequest):
+def nutrition_delete(req: DeleteFoodRequest):
     try:
         result = models.delete_food(req.id)
         return ok_response(result)
@@ -170,7 +228,7 @@ async def nutrition_delete(req: DeleteFoodRequest):
 
 
 @app.get("/api/nutrition/today")
-async def nutrition_today(date: Optional[str] = Query(None)):
+def nutrition_today(date: Optional[str] = Query(None)):
     try:
         result = models.get_food_log(date)
         return ok_response(result)
@@ -181,7 +239,7 @@ async def nutrition_today(date: Optional[str] = Query(None)):
 # ── Health Endpoints ─────────────────────────────────────────────
 
 @app.post("/api/health/manual")
-async def health_manual(req: AddHealthRequest):
+def health_manual(req: AddHealthRequest):
     try:
         result = models.add_health(
             date=req.date,
@@ -203,7 +261,7 @@ async def health_manual(req: AddHealthRequest):
 
 
 @app.get("/api/health/today")
-async def health_today(date: Optional[str] = Query(None)):
+def health_today(date: Optional[str] = Query(None)):
     try:
         result = models.get_health(date)
         return ok_response(result)
@@ -214,7 +272,7 @@ async def health_today(date: Optional[str] = Query(None)):
 # ── Garmin Sync ──────────────────────────────────────────────────
 
 @app.post("/api/garmin/sync")
-async def garmin_sync(req: GarminSyncRequest):
+def garmin_sync(req: GarminSyncRequest):
     """Holt Daten von Garmin Connect und speichert sie direkt in die DB."""
     target_date_str = req.date or date.today().isoformat()
 
@@ -252,11 +310,20 @@ async def garmin_sync(req: GarminSyncRequest):
             "message": str(e),
         })
 
+    raw_payloads: dict = {}
     try:
-        health_data = fetch_health_data(client, target_date)
-        workout_data = fetch_workouts(client, target_date)
+        health_data = fetch_health_data(client, target_date, raw_out=raw_payloads)
+        workout_data = fetch_workouts(client, target_date, raw_out=raw_payloads)
     except Exception as e:
         return error_response(f"Garmin-Daten konnten nicht abgerufen werden: {e}", 500)
+
+    # Rohdaten vor dem Mapping sichern - Garmin gibt alte Tage nicht
+    # unbegrenzt wieder heraus, ein Feld-Rename waere sonst Datenverlust.
+    for kind, payload in raw_payloads.items():
+        try:
+            models.save_raw_payload(target_date_str, kind, payload)
+        except Exception as e:
+            print(f"[Raw Payload Warn] {kind}: {e}", file=sys.stderr, flush=True)
 
     # Health in DB speichern
     try:
@@ -304,7 +371,7 @@ async def garmin_sync(req: GarminSyncRequest):
 # ── History / Summary ────────────────────────────────────────────
 
 @app.get("/api/history/summary")
-async def history_summary(days: int = Query(7, ge=1, le=365)):
+def history_summary(days: int = Query(7, ge=1, le=365)):
     try:
         result = models.get_summary(days)
         return ok_response(result)
@@ -315,7 +382,7 @@ async def history_summary(days: int = Query(7, ge=1, le=365)):
 # ── Charts / Daily Overview ──────────────────────────────────────
 
 @app.get("/api/charts/daily-overview")
-async def charts_daily_overview(days: int = Query(14, ge=1, le=365)):
+def charts_daily_overview(days: int = Query(14, ge=1, le=365)):
     try:
         result = models.get_daily_overview(days)
         return ok_response(result)
@@ -342,7 +409,7 @@ def _map_off_product(product: dict) -> dict:
 
 
 @app.get("/api/food/search")
-async def food_search(q: str = Query(..., min_length=1)):
+def food_search(q: str = Query(..., min_length=1)):
     """Search OpenFoodFacts for food products."""
     from urllib.parse import quote
     url = (
@@ -364,7 +431,7 @@ async def food_search(q: str = Query(..., min_length=1)):
 
 
 @app.get("/api/food/barcode/{barcode}")
-async def food_barcode(barcode: str):
+def food_barcode(barcode: str):
     """Look up a specific barcode on OpenFoodFacts."""
     url = (
         f"https://world.openfoodfacts.org/api/v2/product/{barcode}"
@@ -387,7 +454,7 @@ async def food_barcode(barcode: str):
 # ── Garmin Status ────────────────────────────────────────────────
 
 @app.get("/api/garmin/status")
-async def garmin_status():
+def garmin_status():
     """Checks if a Garmin session exists and returns sync status."""
     session_dir = ROOT_DIR / "garmin" / ".garmin_session"
     session_exists = session_dir.exists() and any(session_dir.iterdir()) if session_dir.exists() else False
@@ -414,7 +481,7 @@ async def garmin_status():
 # ── AI Report ────────────────────────────────────────────────────
 
 @app.get("/api/report/generate")
-async def report_generate():
+def report_generate():
     """Generiert den AI Coaching Report (Cloud-API mit Fallback)."""
     try:
         coaching_data = models.get_coaching_context(7)
@@ -588,7 +655,7 @@ def build_fallback_report(summary_data: dict) -> str:
 # ── Legacy /run Endpoint (Abwaertskompatibilitaet) ───────────────
 
 @app.post("/run")
-async def legacy_run(payload: dict):
+def legacy_run(payload: dict):
     """
     Abwaertskompatibel: Akzeptiert {action, params} wie der alte http_server.py.
     Leitet intern an die neuen Endpoints weiter.
@@ -652,8 +719,22 @@ if FRONTEND_DIR.exists():
 
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.environ.get("OPEN_GARMIN_API_PORT", "8765"))
-    print(f"AI Athletik-Coach API v2.0 starting on http://localhost:{port}")
+    # Default 127.0.0.1: Der Server hat keine Auth und liefert Gesundheitsdaten
+    # aus. Fuer LAN-Zugriff bewusst OPEN_GARMIN_API_HOST=0.0.0.0 setzen -
+    # dann aber auch API_TOKEN und ALLOWED_ORIGINS setzen.
+    host = os.environ.get("OPEN_GARMIN_API_HOST", "127.0.0.1")
+
+    print(f"AI Athletik-Coach API v2.0 starting on http://{host}:{port}")
     print(f"Frontend: http://localhost:{port}/")
     print(f"API Docs: http://localhost:{port}/docs")
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+
+    if host not in ("127.0.0.1", "localhost") and not os.environ.get("API_TOKEN", "").strip():
+        print(
+            f"[WARN] Server lauscht auf {host} ohne API_TOKEN - "
+            "Gesundheitsdaten sind im Netz ungeschuetzt lesbar und schreibbar!",
+            file=sys.stderr, flush=True,
+        )
+
+    uvicorn.run(app, host=host, port=port, log_level="info")

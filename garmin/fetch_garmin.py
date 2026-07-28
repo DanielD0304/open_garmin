@@ -172,14 +172,26 @@ def check_session_status():
 
 # ── Daten abrufen ────────────────────────────────────────────────
 
-def fetch_health_data(garmin, target_date):
-    """Holt alle relevanten Gesundheitsdaten fuer ein Datum."""
+def fetch_health_data(garmin, target_date, raw_out: dict | None = None):
+    """
+    Holt alle relevanten Gesundheitsdaten fuer ein Datum.
+
+    raw_out (optional) wird mit den unveraenderten API-Antworten befuellt.
+    Garmin ist eine inoffizielle API - wenn dort ein Feld umbenannt wird,
+    faellt das Mapping unten still auf None zurueck. Mit den Rohdaten laesst
+    sich die Historie spaeter neu parsen statt verloren zu sein.
+    """
     date_str = target_date.isoformat()
     health = {}
+
+    def keep(kind, payload):
+        if raw_out is not None and payload is not None:
+            raw_out[kind] = payload
 
     # HRV
     try:
         hrv_data = garmin.get_hrv_data(date_str)
+        keep("hrv", hrv_data)
         if hrv_data:
             summary = hrv_data.get("hrvSummary", {}) or {}
             health["hrv_avg"] = summary.get("weeklyAvg") or summary.get("lastNightAvg")
@@ -191,6 +203,7 @@ def fetch_health_data(garmin, target_date):
     # Sleep
     try:
         sleep_data = garmin.get_sleep_data(date_str)
+        keep("sleep", sleep_data)
         if sleep_data:
             daily_sleep = sleep_data.get("dailySleepDTO", {}) or {}
             health["sleep_score"] = daily_sleep.get("sleepScores", {}).get("overall", {}).get("value")
@@ -203,6 +216,7 @@ def fetch_health_data(garmin, target_date):
     # Resting Heart Rate
     try:
         hr_data = garmin.get_rhr_day(date_str)
+        keep("rhr", hr_data)
         if hr_data:
             for entry in hr_data.get("allMetrics", {}).get("metricsMap", {}).get("WELLNESS_RESTING_HEART_RATE", []):
                 if entry.get("calendarDate") == date_str:
@@ -218,6 +232,7 @@ def fetch_health_data(garmin, target_date):
     # Body Battery
     try:
         bb_data = garmin.get_body_battery(date_str)
+        keep("body_battery", bb_data)
         if bb_data and isinstance(bb_data, list) and len(bb_data) > 0:
             charged_values = [e.get("charged", 0) for e in bb_data if e.get("charged") is not None]
             drained_values = [e.get("drained", 0) for e in bb_data if e.get("drained") is not None]
@@ -237,6 +252,7 @@ def fetch_health_data(garmin, target_date):
     # Stress
     try:
         stress_data = garmin.get_stress_data(date_str)
+        keep("stress", stress_data)
         if stress_data:
             health["stress_avg"] = stress_data.get("overallStressLevel")
         else:
@@ -247,6 +263,7 @@ def fetch_health_data(garmin, target_date):
     # Steps + Active Calories (aus daily stats)
     try:
         stats = garmin.get_stats(date_str)
+        keep("stats", stats)
         if stats:
             health["steps"] = stats.get("totalSteps")
             health["active_calories"] = stats.get("activeKilocalories")
@@ -260,13 +277,15 @@ def fetch_health_data(garmin, target_date):
     return health
 
 
-def fetch_workouts(garmin, target_date):
+def fetch_workouts(garmin, target_date, raw_out: dict | None = None):
     """Holt alle Workouts/Aktivitaeten fuer ein Datum."""
     date_str = target_date.isoformat()
     workouts = []
 
     try:
         activities = garmin.get_activities_by_date(date_str, date_str, "")
+        if raw_out is not None and activities:
+            raw_out["activities"] = activities
         if not activities:
             return workouts
 

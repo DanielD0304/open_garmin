@@ -404,7 +404,8 @@ class RequestHandler(BaseHTTPRequestHandler):
 def main() -> None:
     load_project_env()
     port = int(os.environ.get("OPEN_GARMIN_API_PORT", "8765"))
-    host = os.environ.get("OPEN_GARMIN_API_HOST", "0.0.0.0")
+    # Default 127.0.0.1: kein Auth-Layer, aber Gesundheitsdaten im Zugriff.
+    host = os.environ.get("OPEN_GARMIN_API_HOST", "127.0.0.1")
     server = ThreadingHTTPServer((host, port), RequestHandler)
     print(f"open_garmin API server listening on http://{host}:{port}")
     try:

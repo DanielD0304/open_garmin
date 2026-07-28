@@ -59,7 +59,21 @@ Kurzanleitung zum Starten der Open-Garmin-Umgebung lokal (Windows).
     `http://localhost:5678/webhook/report/generate?date=YYYY-MM-DD`
   - AI-Report direkt: `http://localhost:8765/api/report/generate`
 
+- Tests
+
+  ```powershell
+  venv\Scripts\pip install -r requirements-dev.txt
+  venv\Scripts\python -m pytest
+  ```
+
 - Hinweise
+  - Der Server lauscht jetzt auf `127.0.0.1` statt `0.0.0.0`. Für Zugriff von
+    anderen Geräten `OPEN_GARMIN_API_HOST=0.0.0.0` **und** `API_TOKEN` setzen.
+  - Der verbleibende n8n-Workflow ruft `http://localhost:8765/api/garmin/sync`
+    auf. Aus dem Container heraus ist `localhost` der Container selbst – der
+    Aufruf erreichte den Host also noch nie. Damit er funktioniert: URL auf
+    `http://host.docker.internal:8765/...` ändern **und** den Server mit
+    `OPEN_GARMIN_API_HOST=0.0.0.0` plus `API_TOKEN` starten.
   - Wenn n8n Workflows nicht importiert werden, warte auf CLI-Readiness (Skript macht das automatisch).
   - Wenn `AI_API_KEY` fehlt oder das Free-Tier-Limit (HTTP 429) erreicht ist, liefert der Wrapper einen Fallback-Report.
   - Firewall/Windows Defender kann Portfreigaben blockieren; erlaube ggf. die Ports 5678 und 8765.

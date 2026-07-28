@@ -5,34 +5,70 @@ Alle Funktionen geben dicts zurueck.
 Fehler werden als Python-Exceptions geworfen.
 """
 
+import json
 import sqlite3
 import os
+import threading
 from datetime import datetime, timedelta
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "coach.db")
+DB_PATH = os.environ.get("COACH_DB_PATH") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "coach.db"
+)
 
-_connection: sqlite3.Connection | None = None
+# Eine Verbindung pro Thread. FastAPI fuehrt sync-Handler im Threadpool aus,
+# und eine sqlite3-Verbindung darf nicht ungeschuetzt zwischen Threads wandern.
+_local = threading.local()
+_all_connections: set[sqlite3.Connection] = set()
+_registry_lock = threading.Lock()
 
 
 # ── Connection Management ────────────────────────────────────────
 
 def get_connection() -> sqlite3.Connection:
-    """Gibt eine geteilte SQLite-Verbindung zurueck (Singleton pro Prozess)."""
-    global _connection
-    if _connection is None:
-        _connection = sqlite3.connect(DB_PATH, check_same_thread=False)
-        _connection.row_factory = sqlite3.Row
-        _connection.execute("PRAGMA journal_mode=WAL")
-        _connection.execute("PRAGMA foreign_keys=ON")
-    return _connection
+    """Gibt die SQLite-Verbindung des aktuellen Threads zurueck."""
+    conn = getattr(_local, "connection", None)
+    if conn is None:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        # Warten statt sofort "database is locked" werfen, wenn ein anderer
+        # Thread gerade schreibt.
+        conn.execute("PRAGMA busy_timeout=5000")
+        _local.connection = conn
+        with _registry_lock:
+            _all_connections.add(conn)
+    return conn
 
 
 def close_connection():
-    """Schliesst die geteilte Verbindung."""
-    global _connection
-    if _connection is not None:
-        _connection.close()
-        _connection = None
+    """Schliesst die Verbindung des aktuellen Threads."""
+    conn = getattr(_local, "connection", None)
+    if conn is not None:
+        conn.close()
+        _local.connection = None
+        with _registry_lock:
+            _all_connections.discard(conn)
+
+
+def close_all_connections():
+    """Schliesst alle Thread-Verbindungen (Shutdown)."""
+    close_connection()
+    with _registry_lock:
+        connections = list(_all_connections)
+        _all_connections.clear()
+    for conn in connections:
+        try:
+            conn.close()
+        except sqlite3.Error:
+            pass
+
+
+def set_db_path(path: str) -> None:
+    """Wechselt die Datenbankdatei (fuer Tests). Schliesst alle Verbindungen."""
+    global DB_PATH
+    close_all_connections()
+    DB_PATH = path
 
 
 def _row_to_dict(row) -> dict | None:
@@ -45,6 +81,65 @@ def _rows_to_list(rows) -> list[dict]:
 
 def _today_iso() -> str:
     return datetime.now().strftime("%Y-%m-%d")
+
+
+def _window(days: int) -> tuple[str, str]:
+    """
+    Gibt (start_date, end_date) fuer die letzten N Tage zurueck.
+
+    Beide Grenzen stammen aus derselben Uhrzeit-Abfrage - vorher las jede
+    Funktion die Uhr zweimal, was ueber Mitternacht ein inkonsistentes
+    Fenster ergeben konnte.
+    """
+    end_date = _today_iso()
+    start_date = (
+        datetime.strptime(end_date, "%Y-%m-%d") - timedelta(days=days - 1)
+    ).strftime("%Y-%m-%d")
+    return start_date, end_date
+
+
+# ── Garmin Rohdaten ──────────────────────────────────────────────
+
+def save_raw_payload(date: str, kind: str, payload) -> dict:
+    """
+    Legt die unveraenderte Garmin-Antwort ab.
+
+    Garmin ist eine inoffizielle API: Wenn dort ein Feld umbenannt wird,
+    liefert das Mapping in fetch_garmin.py stillschweigend None. Mit dem
+    Rohpayload laesst sich die Historie spaeter neu parsen statt neu holen
+    (Garmin gibt alte Tage nicht unbegrenzt heraus).
+    """
+    conn = get_connection()
+    cursor = conn.execute(
+        "INSERT INTO raw_garmin_payloads (date, kind, payload) VALUES (?, ?, ?)",
+        (date, kind, json.dumps(payload, ensure_ascii=False, default=str)),
+    )
+    conn.commit()
+    return {"id": cursor.lastrowid, "date": date, "kind": kind}
+
+
+def get_raw_payloads(date: str, kind: str | None = None) -> list[dict]:
+    """Liest die Rohpayloads eines Tages (optional nach Typ gefiltert)."""
+    conn = get_connection()
+    if kind:
+        rows = conn.execute(
+            "SELECT * FROM raw_garmin_payloads WHERE date = ? AND kind = ? ORDER BY fetched_at DESC",
+            (date, kind),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM raw_garmin_payloads WHERE date = ? ORDER BY fetched_at DESC",
+            (date,),
+        ).fetchall()
+
+    result = []
+    for row in _rows_to_list(rows):
+        try:
+            row["payload"] = json.loads(row["payload"])
+        except (json.JSONDecodeError, TypeError):
+            pass
+        result.append(row)
+    return result
 
 
 # ── Nutrition ────────────────────────────────────────────────────
@@ -207,8 +302,7 @@ def add_workout(
 
 def get_summary(days: int = 7) -> dict:
     """Aggregierte Zusammenfassung der letzten N Tage."""
-    end_date = _today_iso()
-    start_date = (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+    start_date, end_date = _window(days)
     conn = get_connection()
 
     health_rows = _rows_to_list(
@@ -275,8 +369,7 @@ def get_summary(days: int = 7) -> dict:
 
 def get_daily_overview(days: int = 14) -> list[dict]:
     """Aggregated per-day data for charts: health + nutrition + workouts."""
-    end_date = _today_iso()
-    start_date = (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+    start_date, end_date = _window(days)
     conn = get_connection()
 
     rows = conn.execute(
@@ -326,8 +419,7 @@ def get_daily_overview(days: int = 14) -> list[dict]:
 
 def get_nutrition_summary(days: int = 7) -> list[dict]:
     """Per-day nutrition aggregates for the last N days."""
-    end_date = _today_iso()
-    start_date = (datetime.now() - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+    start_date, end_date = _window(days)
     conn = get_connection()
 
     rows = conn.execute(
