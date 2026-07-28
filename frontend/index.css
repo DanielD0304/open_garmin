@@ -955,3 +955,553 @@ body::before {
     grid-template-columns: 1fr;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Chart.js Integration Styles
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Chart Container ─────────────────────────────────────────── */
+.chart-container {
+  position: relative;
+  width: 100%;
+  height: 320px;
+  padding: 12px 8px 4px;
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  transition: border-color var(--duration-base) var(--ease-out);
+}
+
+.chart-container:hover {
+  border-color: var(--border-focus);
+}
+
+.chart-container--sm {
+  height: 220px;
+}
+
+.chart-container--lg {
+  height: 400px;
+}
+
+/* ── Chart Grid (2x2 for History) ────────────────────────────── */
+.chart-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.chart-grid__item {
+  min-width: 0; /* prevent overflow */
+}
+
+.chart-grid__title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 900px) {
+  .chart-grid {
+    grid-template-columns: 1fr;
+  }
+  .chart-container {
+    height: 240px;
+  }
+  .chart-container--sm {
+    height: 180px;
+  }
+}
+
+/* ── Period Selection Buttons ────────────────────────────────── */
+.chart-period-btns {
+  display: flex;
+  gap: 6px;
+}
+
+.chart-period-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  font-family: var(--font-main);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.chart-period-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-focus);
+  background: var(--bg-card-hover);
+}
+
+.chart-period-btn.active {
+  color: hsl(225, 25%, 8%);
+  background: var(--accent-gradient);
+  border-color: transparent;
+  box-shadow: 0 2px 8px var(--accent-glow);
+}
+
+/* ── Macro Doughnut Wrapper ──────────────────────────────────── */
+.macro-doughnut-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.macro-doughnut-wrapper .chart-container {
+  max-width: 280px;
+  height: 240px;
+  background: transparent;
+  border: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   OpenFoodFacts Search Styles
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Food Search Wrapper ─────────────────────────────────────── */
+.food-search-wrapper {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.food-search-wrapper .form-input {
+  padding-left: 40px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%235a5e72' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 12px center;
+}
+
+.food-search-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ── Food Search Results ─────────────────────────────────────── */
+.food-search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-hover);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  max-height: 340px;
+  overflow-y: auto;
+  margin-top: 4px;
+  display: none;
+}
+
+.food-search-results.is-visible {
+  display: block;
+  animation: slide-down var(--duration-base) var(--ease-out);
+}
+
+.food-search-results:empty {
+  display: none;
+}
+
+.food-search-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.food-search-item:last-child {
+  border-bottom: none;
+}
+
+.food-search-item:hover {
+  background: var(--bg-card-hover);
+}
+
+.food-search-item__image {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--bg-input);
+  flex-shrink: 0;
+}
+
+.food-search-item__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.food-search-item__name {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.food-search-item__brand {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.food-search-item__macros {
+  display: flex;
+  gap: 10px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.food-search-item__macros span {
+  white-space: nowrap;
+}
+
+/* ── Search Loading ──────────────────────────────────────────── */
+.food-search-loading {
+  text-align: center;
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* ── Barcode Scanner Modal ───────────────────────────────────── */
+.barcode-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: rgba(0, 0, 0, 0.85);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.barcode-modal.is-visible {
+  display: flex;
+  animation: fade-in var(--duration-base) var(--ease-out);
+}
+
+.barcode-modal__video {
+  width: 100%;
+  max-width: 500px;
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 40px var(--accent-glow);
+}
+
+.barcode-modal__close {
+  margin-top: 16px;
+  padding: 10px 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-main);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.barcode-modal__close:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.barcode-modal__hint {
+  margin-top: 12px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Chart Components ────────────────────────────────────────── */
+
+.chart-container {
+  position: relative;
+  width: 100%;
+  height: 300px;
+  padding: 12px;
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.chart-container--sm {
+  height: 200px;
+  padding: 8px;
+}
+
+.chart-container--donut {
+  height: 220px;
+  padding: 12px;
+  margin-top: 20px;
+}
+
+/* 2x2 Grid for History Page Charts */
+.chart-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.chart-grid__item {
+  min-width: 0;
+}
+
+.chart-grid__title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+
+/* Period Selection Buttons (7d / 14d / 30d) */
+.chart-period-btns {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  border: 1px solid var(--border-subtle);
+}
+
+.chart-period-btn {
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: var(--font-main);
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.chart-period-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+
+.chart-period-btn.active {
+  color: hsl(225, 25%, 8%);
+  background: var(--accent-gradient);
+  box-shadow: 0 1px 6px var(--accent-glow);
+}
+
+
+/* ── Food Search ─────────────────────────────────────────────── */
+
+.food-search-wrapper {
+  position: relative;
+  margin-bottom: 20px;
+}
+
+.food-search-input-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.food-search-input {
+  flex: 1;
+}
+
+.food-search-results {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-top: none;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: var(--shadow-hover);
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.food-search-results.is-visible {
+  display: block;
+  animation: slide-down var(--duration-base) var(--ease-out);
+}
+
+.food-search-empty {
+  padding: 16px 20px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.food-search-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.food-search-item:last-child {
+  border-bottom: none;
+}
+
+.food-search-item:hover {
+  background: var(--bg-card-hover);
+}
+
+.food-search-item__name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.food-search-item__brand {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.food-search-item__macros {
+  display: flex;
+  gap: 10px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.food-search-item__macros span:first-child {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.food-search-item__per {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+
+/* ── Barcode Scanner Modal ───────────────────────────────────── */
+
+.barcode-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.85);
+  display: grid;
+  place-items: center;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: fade-in var(--duration-base) var(--ease-out);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.barcode-modal__inner {
+  width: min(480px, 90vw);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-hover);
+}
+
+.barcode-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.barcode-modal__header h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.barcode-modal__close {
+  width: 32px;
+  height: 32px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all var(--duration-fast);
+}
+
+.barcode-modal__close:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: hsla(0, 75%, 58%, .15);
+}
+
+.barcode-modal__video {
+  width: 100%;
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border: 1px solid var(--border-subtle);
+}
+
+.barcode-modal__status {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+
+/* ── Responsive: Charts & Search ─────────────────────────────── */
+
+@media (max-width: 900px) {
+  .chart-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .food-search-input-row {
+    flex-direction: column;
+  }
+}

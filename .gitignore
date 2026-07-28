@@ -1,5 +1,8 @@
 .env
 db/coach.db
+db/coach.db-shm
+db/coach.db-wal
+.pytest_cache/
 garmin/.garmin_session/
 venv/
 node_modules/

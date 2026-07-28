@@ -14,14 +14,17 @@ import subprocess
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib import error as urllib_error
-from urllib import request as urllib_request
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 VENV_PYTHON = ROOT_DIR / "venv" / "Scripts" / "python.exe"
 PYTHON_EXE = str(VENV_PYTHON if VENV_PYTHON.exists() else Path(sys.executable))
 ENV_FILE = ROOT_DIR / ".env"
+
+# Auch beim direkten Aufruf (python db/http_server.py) importierbar machen
+sys.path.insert(0, str(ROOT_DIR))
+
+from db.ai_client import generate_ai_report, get_model  # noqa: E402
 
 
 def load_project_env() -> None:
@@ -211,15 +214,15 @@ def run_db_action(action: str, params: dict) -> tuple[dict, int]:
 
         report_data = summary_payload.get("data", {})
         context = build_report_context(report_data)
-        ollama_report, ollama_error = generate_ollama_report(context)
+        report, ai_error = generate_ai_report(context)
 
-        if ollama_report:
+        if report:
             return {
                 "status": "ok",
                 "data": {
-                    "report": ollama_report,
-                    "mode": "ollama",
-                    "model": os.environ.get("OLLAMA_MODEL", "gemma2"),
+                    "report": report,
+                    "mode": "api",
+                    "model": get_model(),
                 },
             }, 200
 
@@ -229,7 +232,7 @@ def run_db_action(action: str, params: dict) -> tuple[dict, int]:
                 "report": build_fallback_report(report_data),
                 "mode": "fallback",
                 "model": None,
-                "ollama_error": ollama_error,
+                "ai_error": ai_error,
             },
         }, 200
 
@@ -292,60 +295,6 @@ def build_report_context(summary_data: dict) -> str:
         )
 
     return "\n".join(lines)
-
-
-def generate_ollama_report(context: str) -> tuple[str | None, str | None]:
-    base_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-    model = os.environ.get("OLLAMA_MODEL", "gemma2")
-    payload = {
-        "model": model,
-        "prompt": context,
-        "system": (
-            "Du bist ein erfahrener Athletik- und Erholungs-Coach. "
-            "Analysiere die folgenden Trainings- und Gesundheitsdaten und gib "
-            "einen kurzen, praxisnahen Coaching-Report auf Deutsch. "
-            "Beruecksichtige HRV-Trends, Schlafqualitaet, Stresslevel und Trainingsbelastung. "
-            "Gib konkrete Empfehlungen fuer Training, Erholung und Schlaf. "
-            "Halte den Report unter 500 Woertern. Formatiere mit Markdown-Ueberschriften und Aufzaehlungen."
-        ),
-        "stream": False,
-        "options": {"temperature": 0.7, "num_predict": 512},
-    }
-
-    print(f"[Ollama] Sende Anfrage an {base_url} (Modell: {model})... Bitte warten, das kann dauern!", flush=True)
-
-    request = urllib_request.Request(
-        f"{base_url}/api/generate",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    try:
-        with urllib_request.urlopen(request, timeout=900) as response:
-            raw = response.read().decode("utf-8")
-            print("[Ollama] Antwort erfolgreich erhalten!", flush=True)
-    except urllib_error.HTTPError as e:
-        err_body = e.read().decode("utf-8") if hasattr(e, "read") else ""
-        err_msg = f"HTTP Error {e.code}: {err_body}"
-        print(f"[Ollama Error] {err_msg}", file=sys.stderr, flush=True)
-        return None, err_msg
-    except (urllib_error.URLError, TimeoutError, ValueError) as e:
-        err_msg = f"Connection/Timeout Error: {e}"
-        print(f"[Ollama Error] {err_msg}", file=sys.stderr, flush=True)
-        return None, err_msg
-
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as e:
-        err_msg = f"JSON Decode Error: {e} | Raw: {raw}"
-        print(f"[Ollama Error] {err_msg}", file=sys.stderr, flush=True)
-        return None, err_msg
-
-    report = parsed.get("response")
-    if not isinstance(report, str) or not report.strip():
-        return None, "Ollama hat keinen oder einen leeren Report generiert."
-    return report.strip(), None
 
 
 def build_fallback_report(summary_data: dict) -> str:
@@ -455,7 +404,8 @@ class RequestHandler(BaseHTTPRequestHandler):
 def main() -> None:
     load_project_env()
     port = int(os.environ.get("OPEN_GARMIN_API_PORT", "8765"))
-    host = os.environ.get("OPEN_GARMIN_API_HOST", "0.0.0.0")
+    # Default 127.0.0.1: kein Auth-Layer, aber Gesundheitsdaten im Zugriff.
+    host = os.environ.get("OPEN_GARMIN_API_HOST", "127.0.0.1")
     server = ThreadingHTTPServer((host, port), RequestHandler)
     print(f"open_garmin API server listening on http://{host}:{port}")
     try:

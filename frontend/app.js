@@ -2,12 +2,21 @@
  * Dashboard – app.js (ES Module)
  */
 import { CONFIG, apiFetch, todayISO, escapeHtml } from './shared.js';
+import {
+  initChartDefaults, fetchDailyOverview,
+  createTrendChart, createBarChart,
+  destroyChart, CHART_COLORS,
+} from './charts.js';
 
 const state = {
   todayFoodLog: [],
   todayMacros: { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 },
   healthData: null,
   workouts: [],
+  charts: {
+    hrvSleep: null,
+    calories: null,
+  },
 };
 
 async function fetchTodayFoodLog() {
@@ -120,7 +129,96 @@ function renderWorkoutList() {
   }).join('');
 }
 
+// ── Chart Initialization ───────────────────────────────────────
+
+async function initCharts(days = 14) {
+  try {
+    const data = await fetchDailyOverview(days);
+    const labels = (data.dates || []).map(d => {
+      const parts = d.split('-');
+      return `${parts[2]}.${parts[1]}`;
+    });
+
+    // ── HRV + Sleep dual-axis line chart
+    destroyChart(state.charts.hrvSleep);
+    state.charts.hrvSleep = createTrendChart('chart-hrv-sleep', labels, [
+      {
+        label: 'HRV (ms)',
+        data: data.hrv || [],
+        borderColor: CHART_COLORS.hrv,
+        backgroundColor: CHART_COLORS.hrv + '18',
+        fill: true,
+        yAxisID: 'y',
+      },
+      {
+        label: 'Sleep Score',
+        data: data.sleep_score || [],
+        borderColor: CHART_COLORS.sleep,
+        backgroundColor: CHART_COLORS.sleep + '18',
+        fill: true,
+        yAxisID: 'y1',
+      },
+    ], {
+      scales: {
+        y: {
+          position: 'left',
+          title: { display: true, text: 'HRV (ms)', color: CHART_COLORS.hrv },
+          ticks: { color: CHART_COLORS.hrv + 'aa' },
+        },
+        y1: {
+          position: 'right',
+          title: { display: true, text: 'Sleep Score', color: CHART_COLORS.sleep },
+          ticks: { color: CHART_COLORS.sleep + 'aa' },
+          grid: { drawOnChartArea: false },
+        },
+      },
+    });
+
+    // ── Calories bar chart (aufgenommen vs. verbrannt)
+    destroyChart(state.charts.calories);
+    state.charts.calories = createBarChart('chart-calories', labels, [
+      {
+        label: 'Aufgenommen (kcal)',
+        data: data.calories_in || [],
+        backgroundColor: CHART_COLORS.calories + 'cc',
+        hoverBackgroundColor: CHART_COLORS.calories,
+      },
+      {
+        label: 'Verbrannt (kcal)',
+        data: data.calories_out || [],
+        backgroundColor: CHART_COLORS.hr + 'cc',
+        hoverBackgroundColor: CHART_COLORS.hr,
+      },
+    ]);
+
+  } catch (err) {
+    console.warn('Charts konnten nicht geladen werden:', err.message);
+  }
+}
+
+function setupPeriodButtons() {
+  const container = document.getElementById('chart-period-btns');
+  if (!container) return;
+
+  container.addEventListener('click', (e) => {
+    const btn = e.target.closest('.chart-period-btn');
+    if (!btn) return;
+
+    container.querySelectorAll('.chart-period-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    const days = parseInt(btn.dataset.days, 10) || 14;
+    initCharts(days);
+  });
+}
+
+
 document.addEventListener('DOMContentLoaded', () => {
   fetchTodayFoodLog();
   fetchTodayHealth();
+
+  // Initialize Chart.js and load charts
+  initChartDefaults();
+  setupPeriodButtons();
+  initCharts(14);
 });
