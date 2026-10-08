@@ -1,139 +1,119 @@
 """
-Garmin Connect Daten-Fetcher mit Session-Caching.
+Garmin Connect: Login (inkl. 2FA), Gesundheitsdaten, Workouts und Koerperprofil.
 
-Holt HRV, Sleep, Heart Rate, Body Battery, Stress, Steps und Workouts
-von Garmin Connect und gibt sie als JSON auf stdout aus.
+Gespeichert wird nur das Sitzungs-Token im Datenordner der App
+(%LOCALAPPDATA%\\AI Coach\\garmin_session), nie das Passwort.
 
-Session-Token wird in .garmin_session/ gecacht, um Rate-Limiting
-und staendige 2FA-Prompts zu vermeiden.
-
-Verwendung:
+Verwendung als CLI (zum Testen):
   python garmin/fetch_garmin.py --date 2024-01-15
   python garmin/fetch_garmin.py                     # heute
-
-Fehler-Handling:
-  Bei Login-Fehler (Captcha/2FA) wird KEIN Crash ausgeloest, sondern:
-  {"status": "error", "message": "2FA required"} ausgegeben.
-
-Umgebungsvariablen (oder .env-Datei im Projektroot):
-  GARMIN_EMAIL    – Garmin Connect E-Mail
-  GARMIN_PASSWORD – Garmin Connect Passwort
+Ohne gueltiges Token liest die CLI GARMIN_EMAIL / GARMIN_PASSWORD aus der Umgebung.
 """
 
+from __future__ import annotations
+
+import argparse
 import json
 import os
+import shutil
 import sys
-import argparse
-from datetime import datetime, date
+from datetime import date, timedelta
 
-# Pfade
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
-SESSION_DIR = os.path.join(SCRIPT_DIR, ".garmin_session")
-ENV_FILE = os.path.join(PROJECT_DIR, ".env")
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_DIR not in sys.path:
+    sys.path.insert(0, PROJECT_DIR)
 
+from db.paths import GARMIN_SESSION_DIR  # noqa: E402
 
-# ── Helpers ──────────────────────────────────────────────────────
-
-def output_success(data):
-    """JSON-Erfolgsausgabe auf stdout."""
-    print(json.dumps({"status": "ok", "data": data}, ensure_ascii=False, default=str))
-    sys.exit(0)
+SESSION_DIR = str(GARMIN_SESSION_DIR)
 
 
-def output_error(message, code="error"):
-    """JSON-Fehlerausgabe auf stdout – KEIN Crash."""
-    print(json.dumps({"status": "error", "code": code, "message": str(message)}, ensure_ascii=False))
-    sys.exit(0)  # Exit 0 damit n8n den Output parsen kann
+# ── Fehler ───────────────────────────────────────────────────────
+
+class GarminError(Exception):
+    code = "garmin_error"
 
 
-def load_env():
-    """Laedt .env-Datei falls vorhanden (einfaches key=value Format)."""
-    if not os.path.exists(ENV_FILE):
-        return
-    with open(ENV_FILE, "r") as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                key, _, value = line.partition("=")
-                os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+class GarminAuthRequired(GarminError):
+    code = "garmin_auth_required"
 
 
-def get_credentials():
-    """Holt Garmin-Credentials aus Umgebungsvariablen."""
-    email = os.environ.get("GARMIN_EMAIL", "").strip()
-    password = os.environ.get("GARMIN_PASSWORD", "").strip()
-    if not email or not password:
-        output_error(
-            "GARMIN_EMAIL und GARMIN_PASSWORD muessen als Umgebungsvariablen "
-            "oder in der .env-Datei gesetzt sein.",
-            code="missing_credentials"
-        )
-    return email, password
+class GarminMfaRequired(GarminError):
+    code = "garmin_mfa_required"
 
 
-def ensure_session_dir():
-    """Erstellt das Session-Verzeichnis falls noetig."""
-    os.makedirs(SESSION_DIR, exist_ok=True)
+class GarminRateLimited(GarminError):
+    code = "rate_limited"
 
 
-# ── Garmin Login mit Session-Cache ───────────────────────────────
+def _translate(e: Exception) -> GarminError:
+    msg = str(e)
+    low = msg.lower()
+    if "429" in low or "too many" in low or "rate" in low:
+        return GarminRateLimited("Garmin hat zu viele Anfragen gemeldet. Bitte später erneut versuchen.")
+    if any(k in low for k in ("401", "403", "auth", "password", "credential", "token")):
+        return GarminAuthRequired(f"Garmin-Anmeldung fehlgeschlagen: {msg}")
+    return GarminError(f"Garmin-Fehler: {msg}")
+
+
+# ── Login / Sitzung ──────────────────────────────────────────────
+
+_pending_mfa: dict = {}  # Desktop-App mit genau einem Nutzer: offener 2FA-Vorgang
+
+
+def is_connected() -> bool:
+    return os.path.isdir(SESSION_DIR) and any(os.scandir(SESSION_DIR))
+
 
 def get_garmin_client():
-    """
-    Erstellt einen authentifizierten Garmin-Client.
-
-    1. Versucht zuerst, ein gecachtes Session-Token zu laden.
-    2. Falls das fehlschlaegt, login mit Email/Passwort.
-    3. Speichert das neue Token fuer zukuenftige Aufrufe.
-
-    Bei 2FA/Captcha-Fehlern wird ein strukturierter JSON-Fehler ausgegeben.
-    """
+    """Client aus dem gespeicherten Token. Ohne Token → GarminAuthRequired."""
     try:
         from garminconnect import Garmin
-    except ImportError:
-        output_error(
-            "garminconnect nicht installiert. "
-            "Bitte ausfuehren: pip install garminconnect",
-            code="missing_dependency"
-        )
-
-    ensure_session_dir()
-    email, password = get_credentials()
-
-    garmin = Garmin(email, password)
-
-    # 1. Versuch: Session-Token laden
+    except ImportError as e:
+        raise GarminError("garminconnect nicht installiert (pip install garminconnect)") from e
+    if not is_connected():
+        raise GarminAuthRequired("Nicht mit Garmin verbunden. Bitte in der App anmelden.")
+    garmin = Garmin()
     try:
         garmin.login(SESSION_DIR)
-        return garmin
-    except Exception:
-        pass  # Token nicht vorhanden oder abgelaufen
-
-    # 2. Versuch: Frischer Login
-    try:
-        garmin.login()
-        # Session-Token fuer naechstes Mal speichern
-        garmin.garth.dump(SESSION_DIR)
-        return garmin
     except Exception as e:
-        error_msg = str(e).lower()
-        if any(keyword in error_msg for keyword in ["captcha", "2fa", "mfa", "verification"]):
-            output_error(
-                "2FA/Captcha erforderlich. Bitte manuell bei Garmin Connect "
-                "einloggen oder die Daten manuell im Dashboard eingeben.",
-                code="2fa_required"
-            )
-        elif "rate" in error_msg or "limit" in error_msg or "429" in error_msg:
-            output_error(
-                "Rate-Limit erreicht. Bitte spaeter erneut versuchen.",
-                code="rate_limited"
-            )
-        else:
-            output_error(
-                f"Garmin Login fehlgeschlagen: {e}",
-                code="login_failed"
-            )
+        raise _translate(e) from e
+    return garmin
+
+
+def login_with_credentials(email: str, password: str) -> str:
+    """Meldet sich an. Rueckgabe 'ok' oder 'mfa' (dann submit_mfa aufrufen)."""
+    from garminconnect import Garmin
+    os.makedirs(SESSION_DIR, exist_ok=True)
+    garmin = Garmin(email, password, return_on_mfa=True)
+    try:
+        status, state = garmin.login()
+    except Exception as e:
+        raise _translate(e) from e
+    if status == "needs_mfa":
+        _pending_mfa.clear()
+        _pending_mfa.update(client=garmin, state=state)
+        return "mfa"
+    garmin.client.dump(SESSION_DIR)
+    return "ok"
+
+
+def submit_mfa(code: str) -> str:
+    if not _pending_mfa:
+        raise GarminAuthRequired("Kein offener 2FA-Vorgang. Bitte erneut anmelden.")
+    garmin = _pending_mfa["client"]
+    try:
+        garmin.resume_login(_pending_mfa["state"], code.strip())
+    except Exception as e:
+        raise _translate(e) from e
+    garmin.client.dump(SESSION_DIR)
+    _pending_mfa.clear()
+    return "ok"
+
+
+def logout() -> None:
+    shutil.rmtree(SESSION_DIR, ignore_errors=True)
+    os.makedirs(SESSION_DIR, exist_ok=True)
 
 
 # ── Daten abrufen ────────────────────────────────────────────────
@@ -169,33 +149,26 @@ def fetch_health_data(garmin, target_date):
     # Resting Heart Rate
     try:
         hr_data = garmin.get_rhr_day(date_str)
+        health["resting_hr"] = None
         if hr_data:
             for entry in hr_data.get("allMetrics", {}).get("metricsMap", {}).get("WELLNESS_RESTING_HEART_RATE", []):
                 if entry.get("calendarDate") == date_str:
                     health["resting_hr"] = entry.get("value")
                     break
-            else:
-                health["resting_hr"] = None
-        else:
-            health["resting_hr"] = None
     except Exception:
         health["resting_hr"] = None
 
     # Body Battery
     try:
         bb_data = garmin.get_body_battery(date_str)
-        if bb_data and isinstance(bb_data, list) and len(bb_data) > 0:
+        health["body_battery_high"] = None
+        health["body_battery_low"] = None
+        if bb_data and isinstance(bb_data, list):
             charged_values = [e.get("charged", 0) for e in bb_data if e.get("charged") is not None]
             drained_values = [e.get("drained", 0) for e in bb_data if e.get("drained") is not None]
             if charged_values:
                 health["body_battery_high"] = max(charged_values)
                 health["body_battery_low"] = min(drained_values) if drained_values else 0
-            else:
-                health["body_battery_high"] = None
-                health["body_battery_low"] = None
-        else:
-            health["body_battery_high"] = None
-            health["body_battery_low"] = None
     except Exception:
         health["body_battery_high"] = None
         health["body_battery_low"] = None
@@ -203,22 +176,15 @@ def fetch_health_data(garmin, target_date):
     # Stress
     try:
         stress_data = garmin.get_stress_data(date_str)
-        if stress_data:
-            health["stress_avg"] = stress_data.get("overallStressLevel")
-        else:
-            health["stress_avg"] = None
+        health["stress_avg"] = stress_data.get("overallStressLevel") if stress_data else None
     except Exception:
         health["stress_avg"] = None
 
     # Steps + Active Calories (aus daily stats)
     try:
-        stats = garmin.get_stats(date_str)
-        if stats:
-            health["steps"] = stats.get("totalSteps")
-            health["active_calories"] = stats.get("activeKilocalories")
-        else:
-            health["steps"] = None
-            health["active_calories"] = None
+        stats = garmin.get_stats(date_str) or {}
+        health["steps"] = stats.get("totalSteps")
+        health["active_calories"] = stats.get("activeKilocalories")
     except Exception:
         health["steps"] = None
         health["active_calories"] = None
@@ -230,14 +196,9 @@ def fetch_workouts(garmin, target_date):
     """Holt alle Workouts/Aktivitaeten fuer ein Datum."""
     date_str = target_date.isoformat()
     workouts = []
-
     try:
-        activities = garmin.get_activities_by_date(date_str, date_str, "")
-        if not activities:
-            return workouts
-
-        for act in activities:
-            workout = {
+        for act in garmin.get_activities_by_date(date_str, date_str, "") or []:
+            workouts.append({
                 "activity_type": act.get("activityType", {}).get("typeKey", "unknown"),
                 "duration_min": round(act.get("duration", 0) / 60, 1) if act.get("duration") else None,
                 "distance_km": round(act.get("distance", 0) / 1000, 2) if act.get("distance") else None,
@@ -245,52 +206,88 @@ def fetch_workouts(garmin, target_date):
                 "max_hr": act.get("maxHR"),
                 "calories_burned": act.get("calories"),
                 "training_load": act.get("activityTrainingLoad"),
-            }
-            workouts.append(workout)
+            })
     except Exception as e:
         print(f"[Garmin Fetch Error] Workouts konnten nicht geladen werden: {e}", file=sys.stderr)
-
     return workouts
 
 
-# ── Main ─────────────────────────────────────────────────────────
+def _kg(value):
+    """Garmin liefert Gewicht meist in Gramm."""
+    if value in (None, ""):
+        return None
+    value = float(value)
+    return round(value / 1000, 1) if value > 1000 else round(value, 1)
+
+
+def fetch_body_profile(garmin) -> dict:
+    """Geschlecht, Alter, Groesse, Gewicht und (falls vorhanden) Koerperfett aus Garmin Connect."""
+    profile: dict = {}
+    try:
+        user = garmin.get_user_profile() or {}
+        data = user.get("userData", user)
+        gender = str(data.get("gender") or "").upper()
+        if gender in ("MALE", "FEMALE"):
+            profile["sex"] = "m" if gender == "MALE" else "f"
+        if data.get("height"):
+            profile["heightCm"] = round(float(data["height"]))
+        if data.get("weight"):
+            profile["weightKg"] = _kg(data["weight"])
+        if data.get("birthDate"):
+            born = date.fromisoformat(str(data["birthDate"])[:10])
+            today = date.today()
+            profile["age"] = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+    except Exception as e:
+        print(f"[Garmin] Profil nicht lesbar: {e}", file=sys.stderr)
+
+    # Neueste Waage-/Gewichtsmessung der letzten 90 Tage
+    try:
+        end = date.today()
+        comp = garmin.get_body_composition((end - timedelta(days=90)).isoformat(), end.isoformat()) or {}
+        entries = [e for e in comp.get("dateWeightList") or [] if e.get("weight")]
+        if entries:
+            latest = max(entries, key=lambda e: e.get("date") or e.get("calendarDate") or 0)
+            profile["weightKg"] = _kg(latest["weight"])
+            if latest.get("bodyFat"):
+                profile["bodyFat"] = round(float(latest["bodyFat"]), 1)
+            profile["weightDate"] = str(latest.get("calendarDate") or "")[:10]
+    except Exception as e:
+        print(f"[Garmin] Gewicht nicht lesbar: {e}", file=sys.stderr)
+    return profile
+
+
+# ── CLI ──────────────────────────────────────────────────────────
+
+def _load_env():
+    env_file = os.path.join(PROJECT_DIR, ".env")
+    if os.path.exists(env_file):
+        with open(env_file, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, _, value = line.partition("=")
+                    os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Garmin Connect Daten-Fetcher mit Session-Caching"
-    )
-    parser.add_argument(
-        "--date",
-        default=None,
-        help="Datum im Format YYYY-MM-DD (Standard: heute)",
-    )
+    parser = argparse.ArgumentParser(description="Garmin Connect Daten-Fetcher")
+    parser.add_argument("--date", default=None, help="Datum YYYY-MM-DD (Standard: heute)")
     args = parser.parse_args()
-
-    # .env laden
-    load_env()
-
-    # Ziel-Datum bestimmen
-    if args.date:
-        try:
-            target_date = date.fromisoformat(args.date)
-        except ValueError:
-            output_error(f"Ungueltiges Datumsformat: {args.date}. Erwartet: YYYY-MM-DD")
-    else:
-        target_date = date.today()
-
-    # Garmin-Client authentifizieren
-    garmin = get_garmin_client()
-
-    # Daten abrufen
-    health = fetch_health_data(garmin, target_date)
-    workouts = fetch_workouts(garmin, target_date)
-
-    output_success({
-        "date": target_date.isoformat(),
-        "health": health,
-        "workouts": workouts,
-        "source": "garmin",
-    })
+    target_date = date.fromisoformat(args.date) if args.date else date.today()
+    try:
+        if not is_connected():
+            _load_env()
+            email, password = os.environ.get("GARMIN_EMAIL"), os.environ.get("GARMIN_PASSWORD")
+            if not email or not password:
+                raise GarminAuthRequired("Kein Token und keine GARMIN_EMAIL/GARMIN_PASSWORD gesetzt.")
+            if login_with_credentials(email, password) == "mfa":
+                submit_mfa(input("Garmin 2FA-Code: "))
+        garmin = get_garmin_client()
+        result = {"date": target_date.isoformat(), "health": fetch_health_data(garmin, target_date),
+                  "workouts": fetch_workouts(garmin, target_date), "source": "garmin"}
+        print(json.dumps({"status": "ok", "data": result}, ensure_ascii=False, default=str))
+    except GarminError as e:
+        print(json.dumps({"status": "error", "code": e.code, "message": str(e)}, ensure_ascii=False))
 
 
 if __name__ == "__main__":

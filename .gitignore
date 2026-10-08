@@ -5,3 +5,8 @@ venv/
 node_modules/
 __pycache__/
 *.pyc
+db/claude-workdir/
+*.db-shm
+*.db-wal
+dist/
+build/
