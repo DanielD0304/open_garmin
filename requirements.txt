@@ -1,0 +1,10 @@
+# Laufzeit
+fastapi>=0.115
+uvicorn>=0.30
+garminconnect>=0.3.17
+pywebview>=6.0
+
+# Entwicklung / Build
+pyinstaller>=6.10
+pillow>=10
+pytest>=8

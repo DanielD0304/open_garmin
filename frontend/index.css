@@ -955,3 +955,116 @@ body::before {
     grid-template-columns: 1fr;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Ernährung, Profil & Claude (integrierter Ernährungstracker)
+   ═══════════════════════════════════════════════════════════════ */
+
+.page-toolbar { display: flex; align-items: center; gap: 8px; }
+.page-toolbar__date { min-width: 190px; text-align: center; font-weight: 600; }
+.muted { color: var(--text-muted); }
+.small { font-size: 0.8rem; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.hidden { display: none !important; }
+.over { color: var(--danger) !important; font-weight: 600; }
+.mt-12 { margin-top: 12px; }
+a { color: var(--text-accent); }
+
+/* Kalorienring + Nährwertbalken */
+.energy { display: flex; gap: 28px; align-items: center; flex-wrap: wrap; }
+.energy__ring { width: 150px; height: 150px; flex: none; }
+.energy__ring text { fill: var(--text-primary); font-family: var(--font-main); }
+.nutrient-bars { flex: 1; min-width: 260px; display: grid; gap: 9px; }
+.nutrient-bar { display: grid; grid-template-columns: 120px 1fr 130px; gap: 10px; align-items: center; font-size: 0.82rem; }
+.nutrient-bar__track { height: 8px; background: var(--bg-input); border-radius: var(--radius-full); overflow: hidden; }
+.nutrient-bar__fill { height: 100%; border-radius: var(--radius-full); transition: width var(--duration-base) var(--ease-out); }
+.nutrient-bar__value { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.derivation { margin-top: 16px; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--bg-input);
+  font-size: 0.8rem; color: var(--text-secondary); border: 1px solid var(--border-subtle); }
+.derivation b { color: var(--text-primary); }
+.source-pill { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 1px 8px; border-radius: var(--radius-full);
+  background: var(--accent-soft); color: var(--text-accent); margin-left: 6px; }
+.source-pill--estimate { background: var(--warning-soft); color: var(--warning); }
+
+/* Chips (Favoriten, Antwortoptionen) */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-family: var(--font-main); font-size: 0.82rem; padding: 6px 12px; border-radius: var(--radius-full); cursor: pointer;
+  background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-subtle); transition: all var(--duration-fast); }
+.chip:hover { border-color: var(--border-focus); }
+.chip small { color: var(--text-muted); margin-left: 6px; }
+.chip.is-selected { background: var(--accent-gradient); color: hsl(225, 25%, 8%); border-color: transparent; }
+
+/* Claude-Ergebnisse und Rückfragen */
+.result-card { border: 1px solid var(--border-subtle); background: var(--bg-input); border-radius: var(--radius-md); padding: 14px; margin-top: 12px; }
+.result-card__nutr { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.82rem; margin: 8px 0; color: var(--text-secondary); }
+.result-card__nutr b { color: var(--text-primary); }
+.confidence { font-size: 0.68rem; font-weight: 600; padding: 2px 8px; border-radius: var(--radius-full); text-transform: uppercase;
+  background: var(--info-soft); color: var(--info); }
+.confidence--hoch { background: var(--success-soft); color: var(--success); }
+.confidence--niedrig { background: var(--warning-soft); color: var(--warning); }
+.question-box { border: 1px solid var(--border-focus); background: var(--accent-soft); border-radius: var(--radius-md); padding: 14px; margin-top: 12px; }
+.question-box p { font-weight: 600; margin-bottom: 8px; }
+.question-box .form-input { margin-top: 10px; }
+.usage-line { font-size: 0.75rem; color: var(--text-muted); margin-top: 10px; }
+.error-box { background: var(--danger-soft); color: var(--danger); padding: 10px 14px; border-radius: var(--radius-sm); margin-top: 12px;
+  white-space: pre-wrap; font-size: 0.85rem; }
+.advice-box { margin-top: 12px; padding: 14px; border-radius: var(--radius-md); background: var(--accent-soft); white-space: pre-wrap; font-size: 0.88rem; }
+.inline-spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid currentColor; border-right-color: transparent;
+  border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+
+/* Mahlzeiten-Liste */
+.meal-group + .meal-group { margin-top: 14px; }
+.meal-group__title { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin-bottom: 4px; }
+.entry-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 9px 12px; border-radius: var(--radius-sm); }
+.entry-row:hover { background: var(--bg-input); }
+.entry-row__kcal { text-align: right; font-variant-numeric: tabular-nums; font-size: 0.85rem; white-space: nowrap; }
+.icon-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.95rem; padding: 4px 7px; border-radius: var(--radius-sm); }
+.icon-btn:hover { color: var(--text-primary); background: var(--bg-card-hover); }
+.icon-btn--danger:hover { color: var(--danger); background: var(--danger-soft); }
+
+/* Tabellen */
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.data-table th, .data-table td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--border-subtle); }
+.data-table th:first-child, .data-table td:first-child { text-align: left; }
+.data-table th { color: var(--text-muted); font-weight: 500; font-size: 0.72rem; text-transform: uppercase; letter-spacing: .05em; }
+
+/* Kennzahlen */
+.stat-row { display: flex; gap: 28px; flex-wrap: wrap; }
+.stat__label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+.stat__value { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+
+/* Limit-Balken */
+.limit + .limit { margin-top: 16px; }
+.limit__track { height: 10px; background: var(--bg-input); border-radius: var(--radius-full); overflow: hidden; margin: 6px 0 4px; }
+.limit__fill { height: 100%; background: var(--accent-gradient); }
+.limit__fill--high { background: var(--danger); }
+
+/* Claude-Limit in der Sidebar */
+.sidebar-usage { margin-top: auto; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--bg-input);
+  border: 1px solid var(--border-subtle); font-size: 0.75rem; color: var(--text-secondary); text-decoration: none; display: block; }
+.sidebar-usage__title { font-weight: 600; color: var(--text-primary); margin-bottom: 6px; }
+.sidebar-usage__row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.sidebar-usage__row + .sidebar-usage__row { margin-top: 6px; }
+.sidebar-usage__track { flex: 1; height: 5px; background: var(--bg-card-hover); border-radius: var(--radius-full); overflow: hidden; }
+.sidebar-usage__fill { height: 100%; background: var(--accent); }
+.sidebar-usage__fill--high { background: var(--danger); }
+
+/* Dialog */
+.dialog { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-base); color: var(--text-primary);
+  width: min(640px, calc(100vw - 40px)); padding: 24px; box-shadow: var(--shadow-hover); margin: auto; }
+.dialog::backdrop { background: rgba(0, 0, 0, .55); backdrop-filter: blur(3px); }
+.dialog__title { font-size: 1.1rem; font-weight: 600; margin-bottom: 16px; }
+.dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0 12px; }
+.form-grid .span-all { grid-column: 1 / -1; }
+.form-grid .span-2 { grid-column: span 2; }
+.form-section-title { grid-column: 1 / -1; font-size: 0.85rem; font-weight: 600; color: var(--text-accent); margin: 8px 0 10px; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; margin-bottom: 16px; }
+
+/* Verlaufsdiagramm */
+.kcal-chart { display: flex; align-items: flex-end; gap: 6px; height: 170px; position: relative; border-bottom: 1px solid var(--border-subtle); }
+.kcal-chart__col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px;
+  font-size: 0.68rem; color: var(--text-muted); }
+.kcal-chart__bar { width: 100%; max-width: 30px; border-radius: 6px 6px 0 0; background: var(--accent-gradient); min-height: 2px; }
+.kcal-chart__bar--over { background: var(--danger); }
+.kcal-chart__target { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--text-muted); }

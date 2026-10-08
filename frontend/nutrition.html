@@ -3,19 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ernährung - AI Athletik-Coach</title>
+  <title>Ernährung - AI Coach</title>
   <link rel="stylesheet" href="index.css">
-  <style>
-    .progress-wrapper { margin-bottom: 12px; }
-    .progress-label { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px; color: var(--text-secondary); }
-    .progress-track { height: 10px; background: var(--bg-input); border-radius: var(--radius-full); overflow: hidden; }
-    .progress-fill { height: 100%; border-radius: var(--radius-full); transition: width var(--duration-base) var(--ease-out); }
-    
-    .fill-cal { background: var(--warning); }
-    .fill-prot { background: hsl(175, 70%, 55%); }
-    .fill-carbs { background: hsl(200, 80%, 60%); }
-    .fill-fat { background: hsl(280, 60%, 65%); }
-  </style>
+  <link rel="icon" href="favicon.png">
 </head>
 <body>
   <div class="toast-container" id="toast-container"></div>
@@ -34,130 +24,118 @@
         <a href="health.html" class="sidebar-nav-link">❤️ Health & Training</a>
         <a href="coach.html" class="sidebar-nav-link">🧠 AI Coach</a>
         <a href="history.html" class="sidebar-nav-link">📅 Historie</a>
+        <a href="profile.html" class="sidebar-nav-link">⚙️ Profil & Ziele</a>
       </nav>
     </aside>
 
     <div class="main-content">
       <header class="app-header">
         <h1 class="app-header__title-main">Ernährung</h1>
-        <div class="app-header__date" id="header-date"></div>
+        <div class="page-toolbar">
+          <button class="btn btn--secondary btn--sm" id="prev-day" aria-label="Vorheriger Tag">‹</button>
+          <span class="page-toolbar__date" id="day-label"></span>
+          <button class="btn btn--secondary btn--sm" id="next-day" aria-label="Nächster Tag">›</button>
+          <button class="btn btn--secondary btn--sm" id="today-btn">Heute</button>
+        </div>
       </header>
 
       <main class="dashboard-grid">
-        <!-- Ernährungs-Tracker Formular -->
-        <section class="card" id="nutrition-section">
-          <div class="card__header">
-            <h2 class="card__title">
-              <span class="card__title-icon">🍽️</span>
-              Mahlzeit hinzufügen
-            </h2>
-          </div>
-
-          <form id="food-form" autocomplete="off">
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label" for="food-name">Lebensmittel</label>
-                <input class="form-input" type="text" id="food-name" placeholder="z.B. Skyr, Apfel…" required>
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="meal-label">Mahlzeit</label>
-                <select class="form-select" id="meal-label">
-                  <option value="breakfast">🌅 Frühstück</option>
-                  <option value="lunch">☀️ Mittagessen</option>
-                  <option value="dinner">🌙 Abendessen</option>
-                  <option value="snack">🍎 Snack</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="form-row--4">
-              <div class="form-group">
-                <label class="form-label" for="food-amount">Menge (g)</label>
-                <input class="form-input" type="number" id="food-amount" placeholder="150" min="0" step="1">
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="food-calories">Kalorien</label>
-                <input class="form-input" type="number" id="food-calories" placeholder="kcal" min="0" step="1">
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="food-protein">Protein (g)</label>
-                <input class="form-input" type="number" id="food-protein" placeholder="0" min="0" step="0.1">
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="food-carbs">Carbs (g)</label>
-                <input class="form-input" type="number" id="food-carbs" placeholder="0" min="0" step="0.1">
-              </div>
-            </div>
-
-            <div class="form-row--3">
-              <div class="form-group">
-                <label class="form-label" for="food-fat">Fett (g)</label>
-                <input class="form-input" type="number" id="food-fat" placeholder="0" min="0" step="0.1">
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="food-fiber">Ballaststoffe (g)</label>
-                <input class="form-input" type="number" id="food-fiber" placeholder="0" min="0" step="0.1">
-              </div>
-              <div class="form-group" style="display:flex;align-items:flex-end;">
-                <button type="submit" class="btn btn--primary btn--block btn--sm" id="food-submit-btn">
-                  <span class="spinner"></span>
-                  <span class="btn__text">+ Hinzufügen</span>
-                </button>
-              </div>
-            </div>
-          </form>
-        </section>
-
-        <!-- Tagesziele & Fortschrittsbalken -->
-        <section class="card">
-          <div class="card__header">
-            <h2 class="card__title">
-              <span class="card__title-icon">📊</span>
-              Tagesziele
-            </h2>
-          </div>
-          
-          <div class="progress-wrapper">
-            <div class="progress-label"><span>Kalorien</span><span id="progress-cal-text">0 / 2500 kcal</span></div>
-            <div class="progress-track"><div class="progress-fill fill-cal" id="progress-cal-fill" style="width: 0%"></div></div>
-          </div>
-          
-          <div class="progress-wrapper">
-            <div class="progress-label"><span>Protein</span><span id="progress-prot-text">0 / 150 g</span></div>
-            <div class="progress-track"><div class="progress-fill fill-prot" id="progress-prot-fill" style="width: 0%"></div></div>
-          </div>
-          
-          <div class="progress-wrapper">
-            <div class="progress-label"><span>Kohlenhydrate</span><span id="progress-carbs-text">0 / 250 g</span></div>
-            <div class="progress-track"><div class="progress-fill fill-carbs" id="progress-carbs-fill" style="width: 0%"></div></div>
-          </div>
-          
-          <div class="progress-wrapper">
-            <div class="progress-label"><span>Fett</span><span id="progress-fat-text">0 / 80 g</span></div>
-            <div class="progress-track"><div class="progress-fill fill-fat" id="progress-fat-fill" style="width: 0%"></div></div>
-          </div>
-        </section>
-
-        <!-- Heutiges Food-Log (Volle Breite) -->
+        <!-- Tagesbilanz -->
         <section class="card dashboard-grid__report">
           <div class="card__header">
-            <h2 class="card__title">
-              <span class="card__title-icon">📋</span>
-              Logbuch von Heute
-            </h2>
-            <span class="card__badge" id="nutrition-meal-count">0 Einträge</span>
+            <h2 class="card__title"><span class="card__title-icon">📊</span> Tagesbilanz</h2>
+            <span class="card__badge" id="day-cost">0,00 €</span>
           </div>
-          <div class="food-log" id="food-log" style="max-height: 400px;">
-            <div class="food-log__empty">
-              <span class="food-log__empty-icon">📋</span>
-              Noch keine Einträge heute.
-            </div>
+          <div class="energy">
+            <svg class="energy__ring" viewBox="0 0 120 120" id="energy-ring"></svg>
+            <div class="nutrient-bars" id="nutrient-bars"></div>
+          </div>
+          <div class="derivation" id="derivation"></div>
+        </section>
+
+        <!-- Mit Claude eintragen -->
+        <section class="card">
+          <div class="card__header">
+            <h2 class="card__title"><span class="card__title-icon">✨</span> Mit Claude eintragen</h2>
+          </div>
+          <textarea class="form-textarea" id="claude-text"
+            placeholder="z.B. Pizza Margherita im Pizzawerk, Mensa Adenauerring&#10;oder: 1 L Cola von Lidl"></textarea>
+          <div class="row mt-12">
+            <select class="form-select" id="claude-meal" style="width:auto"></select>
+            <button class="btn btn--primary" id="claude-btn">
+              <span class="spinner"></span><span class="btn__text">Nährwerte suchen</span>
+            </button>
+          </div>
+          <div id="claude-out"></div>
+        </section>
+
+        <!-- Schnell eintragen -->
+        <section class="card">
+          <div class="card__header">
+            <h2 class="card__title"><span class="card__title-icon">⭐</span> Schnell eintragen</h2>
+            <button class="btn btn--secondary btn--sm" id="manage-favs-btn">Favoriten verwalten</button>
+          </div>
+          <div class="row small muted" style="margin-bottom:12px">
+            Mahlzeit <select class="form-select" id="quick-meal" style="width:auto"></select>
+            Menge × <input class="form-input" id="quick-factor" type="number" step="0.25" min="0.25" value="1" style="width:80px">
+          </div>
+          <div class="chips" id="fav-chips"></div>
+          <div class="row mt-12">
+            <button class="btn btn--secondary btn--sm" id="manual-btn">+ Manuell eintragen</button>
           </div>
         </section>
 
+        <!-- Gegessen -->
+        <section class="card dashboard-grid__report">
+          <div class="card__header">
+            <h2 class="card__title"><span class="card__title-icon">📋</span> Gegessen</h2>
+            <button class="btn btn--secondary btn--sm" id="advice-btn">
+              <span class="spinner"></span><span class="btn__text">Was fehlt mir heute noch?</span>
+            </button>
+          </div>
+          <div id="advice-out"></div>
+          <div id="entry-list"></div>
+        </section>
+
+        <!-- Favoriten verwalten -->
+        <section class="card dashboard-grid__report hidden" id="fav-section">
+          <div class="card__header">
+            <h2 class="card__title"><span class="card__title-icon">⭐</span> Favoriten</h2>
+            <button class="btn btn--primary btn--sm" id="new-fav-btn">+ Neuer Favorit</button>
+          </div>
+          <p class="small muted" style="margin-bottom:12px">Favoriten erscheinen als Schnellknöpfe. Claude nutzt sie auch,
+            wenn du z.B. „mein übliches Müsli“ schreibst.</p>
+          <div style="overflow-x:auto"><table class="data-table" id="fav-table"></table></div>
+        </section>
       </main>
     </div>
   </div>
+
+  <dialog class="dialog" id="item-dialog">
+    <form method="dialog" id="item-form">
+      <div class="dialog__title" id="item-dialog-title">Eintrag</div>
+      <div class="form-grid">
+        <div class="form-group span-all"><label class="form-label">Name</label><input class="form-input" name="food_name" required></div>
+        <div class="form-group"><label class="form-label">Menge</label><input class="form-input" name="amount_text" placeholder="1 Portion"></div>
+        <div class="form-group" data-entry-only><label class="form-label">Mahlzeit</label><select class="form-select" name="meal_label"></select></div>
+        <div class="form-group"><label class="form-label">kcal</label><input class="form-input" name="calories" type="number" step="any"></div>
+        <div class="form-group"><label class="form-label">Eiweiß (g)</label><input class="form-input" name="protein_g" type="number" step="any"></div>
+        <div class="form-group"><label class="form-label">Kohlenhydrate (g)</label><input class="form-input" name="carbs_g" type="number" step="any"></div>
+        <div class="form-group"><label class="form-label">davon Zucker (g)</label><input class="form-input" name="sugar_g" type="number" step="any"></div>
+        <div class="form-group"><label class="form-label">Fett (g)</label><input class="form-input" name="fat_g" type="number" step="any"></div>
+        <div class="form-group"><label class="form-label">ges. Fett (g)</label><input class="form-input" name="satfat_g" type="number" step="any"></div>
+        <div class="form-group"><label class="form-label">Ballaststoffe (g)</label><input class="form-input" name="fiber_g" type="number" step="any"></div>
+        <div class="form-group"><label class="form-label">Salz (g)</label><input class="form-input" name="salt_g" type="number" step="any"></div>
+        <div class="form-group"><label class="form-label">Preis (€)</label><input class="form-input" name="price_eur" type="number" step="0.01"></div>
+        <div class="form-group span-all"><label class="form-label">Quelle / Notiz</label><input class="form-input" name="notes"></div>
+        <label class="check span-all" data-entry-only><input type="checkbox" name="asFavorite"> auch als Favorit speichern</label>
+      </div>
+      <div class="dialog__actions">
+        <button class="btn btn--secondary" value="cancel" formnovalidate>Abbrechen</button>
+        <button class="btn btn--primary" value="ok">Speichern</button>
+      </div>
+    </form>
+  </dialog>
 
   <script type="module" src="shared.js"></script>
   <script type="module" src="nutrition.js"></script>

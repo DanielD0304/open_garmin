@@ -1,87 +1,87 @@
-# AI Athletik- & Ernährungs-Coach
+# AI Coach – Training, Erholung & Ernährung
 
-Lokales Dashboard für Trainings-/Erholungsdaten (Garmin) und Ernährung mit KI-Coaching-Report.
+Desktop-App für Windows: Garmin-Daten (HRV, Schlaf, Stress, Schritte, Workouts) und Ernährung in einem Programm.
+Die KI-Funktionen laufen über dein **Claude-Abo** (Claude Code CLI). Du brauchst keinen API-Key und kein lokales Modell.
 
-## Projektstruktur
+## Funktionen
 
+- **Ernährung mit Claude**: Freitext wie „Pizza Margherita im Pizzawerk“ oder „1 L Cola von Lidl“. Claude sucht Nährwerte
+  und Preis heraus und **fragt nach**, wenn etwas unklar ist, z.B. Marke, Variante oder Gebinde. Für die Mensen des
+  Studierendenwerks Karlsruhe liest die App den Speiseplan selbst und gibt Claude die exakten Werte und Preise mit.
+- **Tagesziel aus Körperprofil + Garmin**: Grundumsatz aus deinen Körperdaten plus die aktiven kcal, die deine Uhr gemessen hat,
+  plus Zu- oder Abschlag für dein Ziel (Fett verlieren, Recomp, halten, Muskelaufbau, zunehmen).
+  Ohne Garmin-Daten wird der Bedarf aus Alltag und Training geschätzt.
+- **Favoriten** als Schnellknöpfe, **Kosten** pro Tag, Woche und Monat gegen dein Tagesbudget.
+- **Garmin**: Login mit 2FA direkt in der App, automatischer Sync beim Start, Körperdaten (Gewicht, Körperfett) aus Garmin.
+- **Coach-Report** und **„Was fehlt mir heute noch?“**: Claude wertet Training, Erholung und Ernährung zusammen aus.
+- **Claude-Limit** immer sichtbar: Wie viel Prozent deines 5-Stunden- und Wochenlimits verbraucht sind, plus Tokens pro Anfrage.
+
+## Installation
+
+### 1. Claude Code CLI (einmalig)
+
+```powershell
+irm https://claude.ai/install.ps1 | iex
+claude          # im Terminal starten, dann /login → "Claude account with subscription"
 ```
-open_garmin/
-├── db/
-│   ├── init_db.py          # SQLite-Schema (idempotent)
-│   ├── api.py              # CLI-API für n8n (argparse → JSON)
-│   ├── http_server.py      # Lokaler HTTP-Wrapper für n8n
-│   └── coach.db            # SQLite-Datenbank
-├── frontend/
-│   ├── index.html          # Dashboard
-│   ├── index.css           # Design-System
-│   └── app.js              # Async Fetch-Logik
-├── garmin/
-│   ├── fetch_garmin.py     # Garmin Connect Fetcher
-│   └── .garmin_session/    # Gecachtes Session-Token
-├── n8n/
-│   └── workflows_all.json  # Alle 7 Workflows zum Import
-├── .env.example            # Vorlage für Garmin-Credentials
-├── .gitignore
-└── venv/                   # Python 3.12 (garminconnect)
+
+Die App findet die CLI automatisch (`~\.local\bin`, PATH oder die Version der Claude-Desktop-App).
+Claude läuft im schlanken Modus, ohne Plugins, Skills und MCP. Es darf nur im Web suchen und Seiten lesen und braucht
+pro Suche etwa 4–12k Tokens.
+
+### 2. App bauen
+
+```powershell
+.\scripts\build_exe.ps1          # erstellt dist\AI Coach\AI Coach.exe
+.\scripts\install_shortcuts.ps1  # Startmenü + Desktop
 ```
 
-## Setup
+### 3. Erster Start
 
-### 1. Python venv (bereits erstellt)
-```bash
+Die App öffnet „Profil & Ziele“. Dort verbindest du Garmin (E-Mail, Passwort, ggf. 2FA-Code) und übernimmst die Körperdaten
+mit „Daten aus Garmin übernehmen“. Das Passwort wird nicht gespeichert, nur das Sitzungs-Token von Garmin.
+
+## Daten
+
+Alles liegt lokal in `%LOCALAPPDATA%\AI Coach\`:
+
+| Pfad | Inhalt |
+|------|--------|
+| `coach.db` | SQLite: Ernährung, Favoriten, Profil, Garmin-Daten, Claude-Verbrauch |
+| `garmin_session\` | Garmin-Sitzungs-Token |
+| `logs\app.log` | Protokoll der App |
+
+Daten aus dem früheren Node-Ernährungstracker übernehmen:
+
+```powershell
+.\venv\Scripts\python scripts\import_ernaehrungstracker.py
+```
+
+## Entwicklung
+
+```powershell
 python -m venv venv
-venv\Scripts\pip install garminconnect
+.\venv\Scripts\pip install -r requirements.txt
+.\venv\Scripts\python app.py               # Desktop-Fenster
+.\venv\Scripts\python -m db.server         # nur Server, im Browser: http://127.0.0.1:8765/
+.\venv\Scripts\python -m pytest tests      # Tests
 ```
 
-### 2. Datenbank initialisieren
-```bash
-venv\Scripts\python db\init_db.py
+### Projektstruktur
+
 ```
-
-### 3. Garmin Credentials
-```bash
-copy .env
-```
-
-### 4. Lokalen API-Wrapper starten
-In einem zweiten Terminal:
-```bash
-venv\Scripts\python db\http_server.py
-```
-Der Wrapper lauscht auf `http://localhost:8765/run` und wird von den n8n-Workflows verwendet.
-
-### 5. n8n starten und Workflows importieren
-```bash
-./scripts/import_n8n_workflows.ps1
-```
-Das Skript startet n8n per Docker Compose, importiert die 7 Workflows, veröffentlicht sie und startet n8n danach einmal neu.
-
-### 6. Ollama (für AI-Report)
-```bash
-ollama pull gemma2
-ollama serve
-```
-
-### 7. Frontend öffnen
-`frontend/index.html` im Browser öffnen.
-
-Die n8n-Workflows sprechen den lokalen Wrapper über `host.docker.internal:8765` an. Auf Docker Desktop unter Windows ist diese Adresse aus dem Container erreichbar.
-
-## DB CLI-API Referenz
-
-```bash
-# Ernährung
-python db/api.py add_food --date 2024-01-15 --food-name "Skyr" --calories 85 --protein-g 15
-python db/api.py get_food_log --date 2024-01-15
-python db/api.py delete_food --id 3
-
-# Gesundheit
-python db/api.py add_health --date 2024-01-15 --hrv-avg 48 --sleep-score 82 --source manual
-python db/api.py get_health --date 2024-01-15
-
-# Workouts
-python db/api.py add_workout --date 2024-01-15 --activity-type Running --duration-min 45
-
-# Report (nur Health + Workouts, keine Ernährung)
-python db/api.py get_summary --days 7
+app.py                  Desktop-Start: Server im Hintergrund + Programmfenster (pywebview)
+db/
+  server.py             FastAPI: Ernährung, Favoriten, Profil, Ziele, Garmin, Claude, Report
+  models.py             SQLite-Zugriff
+  init_db.py            Schema + idempotente Migration
+  targets.py            Tagesziel aus Körperprofil + Garmin-Aktivität
+  claude_client.py      Claude Code CLI (Abo), Prompts, Verbrauchsprotokoll
+  mensa.py              Speiseplan-Parser sw-ka.de
+  paths.py              Datenordner der App
+garmin/fetch_garmin.py  Garmin-Login (2FA), Health, Workouts, Körperprofil
+frontend/               Oberfläche (HTML/CSS/JS)
+packaging/              PyInstaller-Spec + Icon
+scripts/                Build, Verknüpfungen, Datenimport
+tests/                  pytest
 ```

@@ -242,6 +242,13 @@ async def targets_get(date: Optional[str] = Query(None)):
     return ok_response(targets_for(_day(date)))
 
 
+@app.get("/api/targets/range")
+async def targets_range(start: str = Query(...), end: str = Query(...)):
+    first, last = date.fromisoformat(start), date.fromisoformat(end)
+    days = [(first + timedelta(days=i)).isoformat() for i in range(min((last - first).days + 1, 366))]
+    return ok_response({"targets": {d: targets_for(d) for d in days}})
+
+
 # ── Health ───────────────────────────────────────────────────────
 
 @app.post("/api/health/manual")

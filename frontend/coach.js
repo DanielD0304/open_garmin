@@ -1,7 +1,7 @@
 /**
  * AI Coach Page – coach.js (ES Module)
  */
-import { CONFIG, apiFetch, todayISO, setButtonLoading, showToast } from './shared.js';
+import { CONFIG, apiFetch, todayISO, setButtonLoading, showToast, usageLine, renderSidebarUsage } from './shared.js';
 
 let isGeneratingReport = false;
 
@@ -16,6 +16,7 @@ async function generateReport() {
   setButtonLoading('generate-report-btn', true);
   btn.disabled = true;
   output.textContent = '';
+  document.getElementById('report-usage').innerHTML = '';
   loading.classList.add('is-active');
 
   try {
@@ -27,6 +28,8 @@ async function generateReport() {
 
     loading.classList.remove('is-active');
     output.innerHTML = formatReportOutput(data.report || data.message || 'Kein Report erhalten.');
+    document.getElementById('report-usage').innerHTML = usageLine(data.usage);
+    renderSidebarUsage(data.usage);
     showToast('Report generiert!', 'success');
   } catch (err) {
     loading.classList.remove('is-active');

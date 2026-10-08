@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI Coach - AI Athletik-Coach</title>
   <link rel="stylesheet" href="index.css">
+  <link rel="icon" href="favicon.png">
 </head>
 <body>
   <div class="toast-container" id="toast-container"></div>
@@ -23,6 +24,7 @@
         <a href="health.html" class="sidebar-nav-link">❤️ Health & Training</a>
         <a href="coach.html" class="sidebar-nav-link active">🧠 AI Coach</a>
         <a href="history.html" class="sidebar-nav-link">📅 Historie</a>
+        <a href="profile.html" class="sidebar-nav-link">⚙️ Profil & Ziele</a>
       </nav>
     </aside>
 
@@ -39,12 +41,12 @@
               <span class="card__title-icon">🤖</span>
               AI Coaching Report
             </h2>
-            <span class="card__badge" id="report-model-badge">gemma2 via Ollama</span>
+            <span class="card__badge" id="report-model-badge">Claude</span>
           </div>
 
           <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:16px;">
-            Basierend auf deinen <strong>Health- und Workout-Daten</strong> der letzten 7 Tage.
-            Ernährungsdaten werden im Report <em>nicht</em> berücksichtigt.
+            Claude wertet deine <strong>Garmin-Daten</strong> (HRV, Schlaf, Stress, Workouts) und deine
+            <strong>Ernährung</strong> der letzten 7 Tage zusammen mit deinem Körperprofil und Ziel aus.
           </p>
 
           <button class="btn btn--primary btn--lg btn--block" id="generate-report-btn" type="button">
@@ -63,6 +65,7 @@
 
           <!-- Report Output -->
           <div class="report-output" id="report-output"></div>
+          <div class="usage-line" id="report-usage"></div>
         </section>
       </main>
     </div>

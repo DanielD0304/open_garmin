@@ -6,6 +6,7 @@
   <meta name="description" content="Lokaler AI Athletik- und Ernährungs-Coach – Historische Daten.">
   <title>Historie - AI Athletik- & Ernährungs-Coach</title>
   <link rel="stylesheet" href="index.css">
+  <link rel="icon" href="favicon.png">
   <style>
     .history-table {
       width: 100%;
@@ -64,6 +65,7 @@
         <a href="health.html" class="sidebar-nav-link">❤️ Health & Training</a>
         <a href="coach.html" class="sidebar-nav-link">🧠 AI Coach</a>
         <a href="history.html" class="sidebar-nav-link active">📅 Historie</a>
+        <a href="profile.html" class="sidebar-nav-link">⚙️ Profil & Ziele</a>
       </nav>
     </aside>
 
@@ -78,8 +80,24 @@
       <!-- ═══ History Grid ═══════════════════════════════════════ -->
       <main class="dashboard-grid">
 
+      <!-- ─── Ernährung & Kosten ──────────────────────── -->
+      <section class="card">
+        <div class="card__header">
+          <h2 class="card__title"><span class="card__title-icon">💶</span> Ausgaben fürs Essen</h2>
+        </div>
+        <div class="stat-row" id="cost-stats"></div>
+      </section>
+
+      <section class="card">
+        <div class="card__header">
+          <h2 class="card__title"><span class="card__title-icon">🔥</span> Kalorien vs. Ziel (14 Tage)</h2>
+        </div>
+        <div class="kcal-chart" id="kcal-chart"></div>
+        <p class="small muted mt-12">Gestrichelt: Ziel aus Körperprofil + Garmin-Aktivität des Tages (Durchschnitt).</p>
+      </section>
+
       <!-- ─── Historische Daten ──────────────────────── -->
-      <section class="card history-section">
+      <section class="card history-section dashboard-grid__report">
         <div class="card__header">
           <h2 class="card__title">
             <span class="card__title-icon">📅</span>
@@ -105,10 +123,13 @@
                 <th>Stress</th>
                 <th>Schritte</th>
                 <th>Workouts</th>
+                <th>kcal / Ziel</th>
+                <th>Eiweiß</th>
+                <th>Kosten</th>
               </tr>
             </thead>
             <tbody id="history-tbody">
-              <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Daten werden geladen...</td></tr>
+              <tr><td colspan="10" style="text-align: center; color: var(--text-muted);">Daten werden geladen...</td></tr>
             </tbody>
           </table>
         </div>

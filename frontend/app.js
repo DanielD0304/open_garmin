@@ -1,11 +1,12 @@
 /**
  * Dashboard – app.js (ES Module)
  */
-import { CONFIG, apiFetch, todayISO, escapeHtml } from './shared.js';
+import { CONFIG, apiFetch, apiGet, todayISO, escapeHtml, fmt, euro } from './shared.js';
 
 const state = {
   todayFoodLog: [],
-  todayMacros: { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 },
+  todayMacros: { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, price: 0 },
+  targets: null,
   healthData: null,
   workouts: [],
 };
@@ -14,6 +15,7 @@ async function fetchTodayFoodLog() {
   try {
     const data = await apiFetch(CONFIG.ENDPOINTS.GET_FOOD_LOG + '?date=' + todayISO(), { method: 'GET' });
     state.todayFoodLog = data.entries || [];
+    state.targets = await apiGet(CONFIG.ENDPOINTS.TARGETS + '?date=' + todayISO()).catch(() => null);
     recalcMacros();
     renderMacroBar();
   } catch (err) {
@@ -29,8 +31,9 @@ function recalcMacros() {
       carbs: acc.carbs + (e.carbs_g || 0),
       fat: acc.fat + (e.fat_g || 0),
       fiber: acc.fiber + (e.fiber_g || 0),
+      price: acc.price + (e.price_eur || 0),
     }),
-    { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
+    { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, price: 0 }
   );
 }
 
@@ -46,6 +49,19 @@ function renderMacroBar() {
   
   const fatEl = document.getElementById('macro-fat');
   if (fatEl) fatEl.textContent = state.todayMacros.fat.toFixed(1) + 'g';
+
+  const costEl = document.getElementById('macro-cost');
+  if (costEl) costEl.textContent = euro(state.todayMacros.price);
+
+  // Ziele aus Koerperprofil + Garmin-Aktivitaet
+  const t = state.targets;
+  if (t) {
+    const label = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    label('macro-cal-label', `von ${fmt(t.kcal)} kcal`);
+    label('macro-prot-label', `Protein / ${t.protein} g`);
+    label('macro-carbs-label', `Carbs / ${t.carbs} g`);
+    label('macro-fat-label', `Fett / ${t.fat} g`);
+  }
 }
 
 async function fetchTodayHealth() {
