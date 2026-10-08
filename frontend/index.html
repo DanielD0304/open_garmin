@@ -6,6 +6,7 @@
   <meta name="description" content="Lokaler AI Athletik- und Ernährungs-Coach – Dashboard für Trainings-, Erholungs- und Ernährungsdaten mit KI-Coaching.">
   <title>AI Athletik- & Ernährungs-Coach</title>
   <link rel="stylesheet" href="index.css">
+  <link rel="icon" href="favicon.png">
 </head>
 <body>
 
@@ -29,6 +30,7 @@
         <a href="health.html" class="sidebar-nav-link">❤️ Health & Training</a>
         <a href="coach.html" class="sidebar-nav-link">🧠 AI Coach</a>
         <a href="history.html" class="sidebar-nav-link">📅 Historie</a>
+        <a href="profile.html" class="sidebar-nav-link">⚙️ Profil & Ziele</a>
       </nav>
     </aside>
 
@@ -50,23 +52,24 @@
               <span class="card__title-icon">📊</span>
               Heutige Makros
             </h2>
+            <span class="card__badge" id="macro-cost">0,00 €</span>
           </div>
           <div class="macro-bar" id="macro-bar">
             <div class="macro-bar__item">
               <div class="macro-bar__value macro-bar__value--cal" id="macro-cal">0</div>
-              <div class="macro-bar__label">kcal</div>
+              <div class="macro-bar__label" id="macro-cal-label">kcal</div>
             </div>
             <div class="macro-bar__item">
               <div class="macro-bar__value macro-bar__value--prot" id="macro-prot">0</div>
-              <div class="macro-bar__label">Protein</div>
+              <div class="macro-bar__label" id="macro-prot-label">Protein</div>
             </div>
             <div class="macro-bar__item">
               <div class="macro-bar__value macro-bar__value--carbs" id="macro-carbs">0</div>
-              <div class="macro-bar__label">Carbs</div>
+              <div class="macro-bar__label" id="macro-carbs-label">Carbs</div>
             </div>
             <div class="macro-bar__item">
               <div class="macro-bar__value macro-bar__value--fat" id="macro-fat">0</div>
-              <div class="macro-bar__label">Fett</div>
+              <div class="macro-bar__label" id="macro-fat-label">Fett</div>
             </div>
           </div>
         </section>

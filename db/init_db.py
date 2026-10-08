@@ -5,6 +5,9 @@ Erstellt folgende Tabellen:
   - nutrition_log:         Einzelne Mahlzeit-Einträge (manuell erfasst)
   - daily_health_metrics:  Garmin-/Manuelle Gesundheitsdaten pro Tag
   - workouts:              Einzelne Trainingseinheiten
+  - favorites:             Häufig gegessene Lebensmittel (Schnelleintrag)
+  - profile:               Körperdaten, Ziele und Einstellungen (eine Zeile, JSON)
+  - claude_usage:          Token-Verbrauch der Claude-Anfragen
   - daily_summary (VIEW):  Aggregierte Tagesübersicht über alle Tabellen
 
 Idempotent: Kann beliebig oft ausgeführt werden (CREATE IF NOT EXISTS).
@@ -14,11 +17,22 @@ import sqlite3
 import os
 import sys
 
-DB_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(DB_DIR, "coach.db")
+try:
+    from db.paths import DB_PATH
+except ImportError:  # Direkt als Skript gestartet: python db/init_db.py
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from db.paths import DB_PATH
 
 
-def init_database(db_path: str = DB_PATH) -> None:
+def _add_columns(cursor, table: str, columns: dict) -> None:
+    """Fuegt fehlende Spalten hinzu (Migration fuer bestehende Datenbanken)."""
+    existing = {row[1] for row in cursor.execute(f"PRAGMA table_info({table})")}
+    for name, col_type in columns.items():
+        if name not in existing:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {name} {col_type}")
+
+
+def init_database(db_path: str = DB_PATH, verbose: bool = True) -> None:
     """Erstellt alle Tabellen und Views in der SQLite-Datenbank."""
 
     conn = sqlite3.connect(db_path)
@@ -50,6 +64,74 @@ def init_database(db_path: str = DB_PATH) -> None:
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_nutrition_date
         ON nutrition_log(date)
+    """)
+
+    # Erweiterte Nährwerte, Preis und Herkunft (Claude-Suche / Mensa-Speiseplan)
+    _add_columns(cursor, "nutrition_log", {
+        "amount_text": "TEXT",   # z.B. "1 Pizza", "0,5 L"
+        "sugar_g":     "REAL",
+        "satfat_g":    "REAL",
+        "salt_g":      "REAL",
+        "price_eur":   "REAL",   # bezahlter Preis
+        "source":      "TEXT",   # URL oder 'Schätzung'
+        "notes":       "TEXT",
+    })
+
+    # ──────────────────────────────────────────────
+    # Tabelle: favorites
+    # Häufig gegessene Lebensmittel für den Schnelleintrag
+    # ──────────────────────────────────────────────
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS favorites (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            food_name     TEXT    NOT NULL,
+            amount_text   TEXT,
+            calories      REAL,
+            protein_g     REAL,
+            carbs_g       REAL,
+            sugar_g       REAL,
+            fat_g         REAL,
+            satfat_g      REAL,
+            fiber_g       REAL,
+            salt_g        REAL,
+            price_eur     REAL,
+            source        TEXT,
+            notes         TEXT,
+            created_at    TEXT    DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # ──────────────────────────────────────────────
+    # Tabelle: profile
+    # Genau eine Zeile mit Körperdaten, Zielen und Einstellungen als JSON
+    # ──────────────────────────────────────────────
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS profile (
+            id          INTEGER PRIMARY KEY CHECK(id = 1),
+            data        TEXT    NOT NULL,
+            updated_at  TEXT    DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # ──────────────────────────────────────────────
+    # Tabelle: claude_usage
+    # Verbrauch jeder Claude-Anfrage + gemeldeter Limit-Stand
+    # ──────────────────────────────────────────────
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS claude_usage (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            at            TEXT    NOT NULL,
+            kind          TEXT,                                   -- lookup, advice, report, limit-check
+            model         TEXT,
+            input_tokens  INTEGER DEFAULT 0,
+            cache_write   INTEGER DEFAULT 0,
+            cache_read    INTEGER DEFAULT 0,
+            output_tokens INTEGER DEFAULT 0,
+            web_searches  INTEGER DEFAULT 0,
+            cost_usd      REAL    DEFAULT 0,                      -- API-Gegenwert, nicht bezahlt
+            duration_ms   INTEGER DEFAULT 0,
+            rate_limit    TEXT                                    -- JSON aus rate_limit_event
+        )
     """)
 
     # ──────────────────────────────────────────────
@@ -119,6 +201,7 @@ def init_database(db_path: str = DB_PATH) -> None:
             COALESCE(n.total_fat_g, 0)          AS total_fat_g,
             COALESCE(n.total_fiber_g, 0)        AS total_fiber_g,
             COALESCE(n.meal_count, 0)           AS meal_count,
+            COALESCE(n.total_price_eur, 0)      AS total_price_eur,
 
             -- Health-Metriken
             h.hrv_avg,
@@ -155,7 +238,8 @@ def init_database(db_path: str = DB_PATH) -> None:
                 SUM(carbs_g)    AS total_carbs_g,
                 SUM(fat_g)      AS total_fat_g,
                 SUM(fiber_g)    AS total_fiber_g,
-                COUNT(*)        AS meal_count
+                COUNT(*)        AS meal_count,
+                SUM(price_eur)  AS total_price_eur
             FROM nutrition_log
             GROUP BY date
         ) n ON d.date = n.date
@@ -177,9 +261,10 @@ def init_database(db_path: str = DB_PATH) -> None:
 
     conn.commit()
     conn.close()
-    print(f"[OK] Datenbank initialisiert: {db_path}")
-    print("     Tabellen: nutrition_log, daily_health_metrics, workouts")
-    print("     Views:    daily_summary")
+    if verbose:
+        print(f"[OK] Datenbank initialisiert: {db_path}")
+        print("     Tabellen: nutrition_log, daily_health_metrics, workouts, favorites, profile, claude_usage")
+        print("     Views:    daily_summary")
 
 
 if __name__ == "__main__":

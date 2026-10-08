@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profil & Ziele - AI Coach</title>
+  <link rel="stylesheet" href="index.css">
+  <link rel="icon" href="favicon.png">
+</head>
+<body>
+  <div class="toast-container" id="toast-container"></div>
+  <div class="app-wrapper">
+    <aside class="sidebar">
+      <div class="sidebar__brand">
+        <div class="sidebar__icon">⚙️</div>
+        <div>
+          <div class="sidebar__title">AI Coach</div>
+          <div class="sidebar__subtitle">Profil & Ziele</div>
+        </div>
+      </div>
+      <nav class="sidebar__nav">
+        <a href="index.html" class="sidebar-nav-link">🏠 Dashboard</a>
+        <a href="nutrition.html" class="sidebar-nav-link">🍽️ Ernährung</a>
+        <a href="health.html" class="sidebar-nav-link">❤️ Health & Training</a>
+        <a href="coach.html" class="sidebar-nav-link">🧠 AI Coach</a>
+        <a href="history.html" class="sidebar-nav-link">📅 Historie</a>
+        <a href="profile.html" class="sidebar-nav-link active">⚙️ Profil & Ziele</a>
+      </nav>
+    </aside>
+
+    <div class="main-content">
+      <header class="app-header">
+        <h1 class="app-header__title-main">Profil & Ziele</h1>
+        <div class="app-header__date" id="header-date"></div>
+      </header>
+
+      <main class="dashboard-grid">
+        <section class="card dashboard-grid__report hidden" id="welcome">
+          <div class="question-box" style="margin:0">
+            <p>Willkommen! Verbinde zuerst Garmin und prüfe deine Körperdaten.</p>
+            <div class="small">Aus Körperprofil und den Aktivitäten, die deine Uhr misst, berechnet die App jeden Tag,
+              wie viel Energie und Eiweiß du brauchst. Mit „Daten aus Garmin übernehmen“ füllt sich das Profil von selbst.</div>
+          </div>
+        </section>
+
+        <!-- Garmin -->
+        <section class="card" style="align-self:start">
+          <div class="card__header">
+            <h2 class="card__title"><span class="card__title-icon">⌚</span> Garmin</h2>
+            <span class="card__badge" id="garmin-badge">…</span>
+          </div>
+          <div id="garmin-connected" class="hidden">
+            <p class="small muted" style="margin-bottom:12px">Verbunden. Beim Start der App werden die letzten Tage automatisch synchronisiert.</p>
+            <div class="row">
+              <button class="btn btn--primary btn--sm" id="garmin-import-btn">
+                <span class="spinner"></span><span class="btn__text">Daten aus Garmin übernehmen</span>
+              </button>
+              <button class="btn btn--secondary btn--sm" id="garmin-logout-btn">Trennen</button>
+            </div>
+          </div>
+          <div id="garmin-disconnected" class="hidden">
+            <p class="small muted" style="margin-bottom:12px">Nicht verbunden. Ohne Garmin schätzt die App deinen Bedarf aus
+              den Angaben zu Alltag und Training.</p>
+            <button class="btn btn--primary btn--sm" id="garmin-login-btn">Mit Garmin verbinden</button>
+          </div>
+        </section>
+
+        <!-- Berechneter Bedarf -->
+        <section class="card">
+          <div class="card__header">
+            <h2 class="card__title"><span class="card__title-icon">🎯</span> Dein Bedarf heute</h2>
+          </div>
+          <div id="targets-view"></div>
+          <p class="small muted mt-12">Grundumsatz nach Mifflin-St Jeor (mit Körperfett nach Katch-McArdle). Aktivität aus den
+            gemessenen aktiven kcal von Garmin, ohne Garmin-Daten aus Alltag + Training geschätzt. Eiweiß 1,6–2,2 g/kg je nach Ziel,
+            Fett 30 %, Kohlenhydrate der Rest. Richtwerte, keine medizinische Beratung.</p>
+        </section>
+
+        <!-- Profil -->
+        <section class="card dashboard-grid__report">
+          <div class="card__header">
+            <h2 class="card__title"><span class="card__title-icon">🧍</span> Körperprofil & Ziel</h2>
+          </div>
+          <form id="profile-form" class="form-grid">
+            <div class="form-section-title">Körperdaten</div>
+            <div class="form-group"><label class="form-label">Name</label><input class="form-input" name="name"></div>
+            <div class="form-group"><label class="form-label">Geschlecht</label>
+              <select class="form-select" name="sex"><option value="m">männlich</option><option value="f">weiblich</option></select></div>
+            <div class="form-group"><label class="form-label">Alter</label><input class="form-input" name="age" type="number" min="10" max="100" required></div>
+            <div class="form-group"><label class="form-label">Größe (cm)</label><input class="form-input" name="heightCm" type="number" min="100" max="230" required></div>
+            <div class="form-group"><label class="form-label">Gewicht (kg)</label><input class="form-input" name="weightKg" type="number" step="0.1" min="30" max="250" required></div>
+            <div class="form-group"><label class="form-label">Körperfett % (optional)</label><input class="form-input" name="bodyFat" type="number" step="0.5" min="3" max="60"></div>
+            <label class="check span-all"><input type="checkbox" name="garminWeightSync"> Gewicht und Körperfett bei jedem Sync aus Garmin übernehmen</label>
+
+            <div class="form-section-title">Bewegung</div>
+            <div class="form-group span-2"><label class="form-label">Alltag (ohne Sport)</label>
+              <select class="form-select" name="activity">
+                <option value="1.2">überwiegend Sitzen (Uni, Büro)</option>
+                <option value="1.375">viel zu Fuß / Fahrrad unterwegs</option>
+                <option value="1.55">viel Stehen / Gehen</option>
+                <option value="1.725">körperlich schwere Arbeit</option>
+              </select></div>
+            <div class="form-group"><label class="form-label">Krafttraining / Woche</label><input class="form-input" name="strengthDays" type="number" min="0" max="7"></div>
+            <div class="form-group"><label class="form-label">Ausdauer / Woche</label><input class="form-input" name="cardioDays" type="number" min="0" max="14"></div>
+            <label class="check span-all"><input type="checkbox" name="useGarmin"> Kalorienziel an die von Garmin gemessene Aktivität anpassen</label>
+
+            <div class="form-section-title">Ziel</div>
+            <div class="form-group span-2"><label class="form-label">Was willst du erreichen?</label>
+              <select class="form-select" name="goal">
+                <option value="lose">Fett verlieren (≈ −0,5 kg/Woche)</option>
+                <option value="recomp">Recomp: Fett runter, Muskeln rauf</option>
+                <option value="maintain">Gewicht halten</option>
+                <option value="muscle">Muskelaufbau (Lean Bulk, ≈ +0,25 kg/Woche)</option>
+                <option value="gain">Zunehmen (≈ +0,5 kg/Woche)</option>
+              </select></div>
+            <div class="form-group"><label class="form-label">Eiweiß g/kg</label><input class="form-input" name="proteinPerKg" type="number" step="0.1" min="0.6" max="3" placeholder="automatisch"></div>
+            <div class="form-group"><label class="form-label">Zielgewicht (kg)</label><input class="form-input" name="targetWeightKg" type="number" step="0.5" min="30" max="250"></div>
+
+            <div class="form-section-title">Essen & Claude</div>
+            <div class="form-group"><label class="form-label">Mensa-Preisgruppe</label>
+              <select class="form-select" name="priceGroup"><option>Studierende</option><option>Bedienstete</option><option>Gäste</option><option>Schüler</option></select></div>
+            <div class="form-group"><label class="form-label">Tagesbudget (€)</label><input class="form-input" name="dailyBudget" type="number" step="0.5" min="0"></div>
+            <div class="form-group span-2"><label class="form-label">Ernährungsweise / Hinweise für Claude</label><input class="form-input" name="diet" placeholder="z.B. vegetarisch, keine Nüsse"></div>
+            <div class="form-group"><label class="form-label">Rückfragen von Claude</label>
+              <select class="form-select" name="questionLevel">
+                <option value="wenig">wenig</option><option value="normal">normal</option><option value="viel">viel (lieber genau)</option>
+              </select></div>
+            <div class="form-group"><label class="form-label">Claude-Modell</label>
+              <select class="form-select" name="claudeModel">
+                <option value="sonnet">Sonnet (schnell)</option><option value="opus">Opus (gründlicher)</option><option value="haiku">Haiku (am sparsamsten)</option>
+              </select></div>
+            <div class="form-group span-2"><label class="form-label">Pfad zur Claude CLI (optional)</label><input class="form-input" name="claudePath" placeholder="automatisch erkennen"></div>
+            <div class="span-all row">
+              <button class="btn btn--primary" type="submit">Speichern</button>
+              <span class="small muted" id="claude-cli-status"></span>
+            </div>
+          </form>
+        </section>
+
+        <!-- Claude-Nutzung -->
+        <section class="card dashboard-grid__report" id="claude">
+          <div class="card__header">
+            <h2 class="card__title"><span class="card__title-icon">✨</span> Claude-Nutzung (dein Abo)</h2>
+            <button class="btn btn--secondary btn--sm" id="usage-refresh-btn">
+              <span class="spinner"></span><span class="btn__text">Aktualisieren</span>
+            </button>
+          </div>
+          <div id="limit-view"></div>
+          <p class="small muted mt-12">Anthropic nennt für Abos keine feste Token-Zahl, sondern wie viel Prozent im 5-Stunden-Fenster
+            und in der Woche verbraucht sind. Diese Werte kommen mit jeder Claude-Antwort. „Aktualisieren“ schickt eine Mini-Anfrage
+            an Haiku. Die App teilt sich das Limit mit claude.ai und Claude Code.</p>
+          <div class="divider"></div>
+          <div class="stat-row" id="usage-stats"></div>
+          <div style="overflow-x:auto" class="mt-12"><table class="data-table" id="usage-table"></table></div>
+          <p class="small muted mt-12">„Rein“ = Prompt + gelesene Webseiten. „API-Wert“ = was die Anfrage über die bezahlte API kosten würde;
+            mit dem Abo zahlst du das nicht extra.</p>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <dialog class="dialog" id="garmin-dialog">
+    <form method="dialog" id="garmin-form">
+      <div class="dialog__title">Mit Garmin verbinden</div>
+      <div id="garmin-step-login">
+        <div class="form-group"><label class="form-label">E-Mail</label><input class="form-input" name="email" type="email" autocomplete="username"></div>
+        <div class="form-group"><label class="form-label">Passwort</label><input class="form-input" name="password" type="password" autocomplete="current-password"></div>
+        <p class="small muted">Das Passwort wird nur für die Anmeldung verwendet und nicht gespeichert. Die App speichert lediglich
+          das Sitzungs-Token von Garmin auf diesem Laptop.</p>
+      </div>
+      <div id="garmin-step-mfa" class="hidden">
+        <div class="form-group"><label class="form-label">Bestätigungscode (2FA)</label>
+          <input class="form-input" name="code" inputmode="numeric" autocomplete="one-time-code"></div>
+        <p class="small muted">Garmin hat dir einen Code per E-Mail oder App geschickt.</p>
+      </div>
+      <div class="error-box hidden" id="garmin-error"></div>
+      <div class="dialog__actions">
+        <button class="btn btn--secondary" value="cancel" formnovalidate>Abbrechen</button>
+        <button class="btn btn--primary" type="button" id="garmin-submit">
+          <span class="spinner"></span><span class="btn__text">Verbinden</span>
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="shared.js"></script>
+  <script type="module" src="profile.js"></script>
+</body>
+</html>

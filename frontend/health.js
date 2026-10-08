@@ -17,22 +17,26 @@ async function syncGarmin() {
       body: JSON.stringify({ date: todayISO() }),
     });
 
-    if (data.status === 'error') {
-      showToast('Garmin: ' + (data.message || 'Login fehlgeschlagen. Bitte manuell eingeben.'), 'warning');
-      showManualHealthForm();
-      return;
-    }
-
     state.healthData = data.health || null;
     state.workouts = data.workouts || [];
     renderHealthMetrics();
     renderWorkoutList();
     showToast('Garmin-Daten synchronisiert!', 'success');
   } catch (err) {
-    showToast(err.message, 'error');
+    handleGarminError(err);
     showManualHealthForm();
   } finally {
     setButtonLoading('garmin-sync-btn', false);
+  }
+}
+
+/** Nicht verbunden → zur Profilseite mit Garmin-Login, sonst Fehlermeldung. */
+function handleGarminError(err) {
+  if (err.code === 'garmin_auth_required') {
+    showToast('Nicht mit Garmin verbunden. Bitte unter „Profil & Ziele“ anmelden.', 'warning');
+    setTimeout(() => { location.href = 'profile.html'; }, 1500);
+  } else {
+    showToast('Garmin: ' + err.message, 'error');
   }
 }
 
@@ -47,20 +51,15 @@ async function syncHistoricalGarmin(days, btnId) {
 
       showToast(`Lade ${isoDate} (${i + 1}/${days})...`, 'info');
 
-      const data = await apiFetch(CONFIG.ENDPOINTS.SYNC_GARMIN, {
+      await apiFetch(CONFIG.ENDPOINTS.SYNC_GARMIN, {
         method: 'POST',
         body: JSON.stringify({ date: isoDate }),
       });
-
-      if (data.status === 'error') {
-        showToast('Abbruch bei ' + isoDate + ': ' + (data.message || 'Fehler'), 'warning');
-        break;
-      }
     }
     showToast('Daten gespeichert! Der AI-Report kann sie jetzt nutzen.', 'success');
     fetchTodayHealth(); 
   } catch (err) {
-    showToast('Fehler beim Sync: ' + err.message, 'error');
+    handleGarminError(err);
   } finally {
     setButtonLoading(btnId, false);
   }

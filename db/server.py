@@ -1,77 +1,95 @@
 """
-FastAPI Server – ersetzt http_server.py + n8n-Proxy.
+FastAPI-Backend der AI-Coach-Desktop-App.
 
-Importiert DB-Funktionen direkt aus models.py (kein subprocess).
-Serviert das Frontend als statische Dateien.
-
-Starten: python -m db.server
-Zugang:  http://localhost:8765/
+Serviert das Frontend und die API. Wird normalerweise von app.py im
+Programmfenster gestartet; zum Debuggen im Browser:
+    python -m db.server   →  http://127.0.0.1:8765/
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
-import sys
+import threading
 from contextlib import asynccontextmanager
-from datetime import date
-from pathlib import Path
+from datetime import date, timedelta
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-# ── Pfade ────────────────────────────────────────────────────────
+from db import claude_client, mensa, models
+from db.claude_client import ClaudeError
+from db.init_db import init_database
+from db.paths import FRONTEND_DIR
+from db.targets import compute_targets
+from garmin import fetch_garmin
+from garmin.fetch_garmin import GarminError
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
-FRONTEND_DIR = ROOT_DIR / "frontend"
-ENV_FILE = ROOT_DIR / ".env"
-
-# Garmin-Modul importierbar machen
-sys.path.insert(0, str(ROOT_DIR))
-
-
-# ── .env laden ───────────────────────────────────────────────────
-
-def load_project_env() -> None:
-    """Laedt .env-Datei ins os.environ."""
-    if not ENV_FILE.exists():
-        return
-    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        os.environ[key.strip()] = value.strip().strip('"').strip("'")
+log = logging.getLogger("ai_coach")
 
 
-load_project_env()
-
-
-# ── DB Models importieren ────────────────────────────────────────
-
-from db import models  # noqa: E402
-
-
-# ── Pydantic Request Models ─────────────────────────────────────
+# ── Request-Modelle ──────────────────────────────────────────────
 
 class AddFoodRequest(BaseModel):
     date: Optional[str] = None
     meal_label: str = "snack"
     food_name: str
     amount_g: Optional[float] = None
+    amount_text: Optional[str] = None
     calories: float = 0
     protein_g: float = 0
     carbs_g: float = 0
     fat_g: float = 0
     fiber_g: float = 0
+    sugar_g: Optional[float] = None
+    satfat_g: Optional[float] = None
+    salt_g: Optional[float] = None
+    price_eur: Optional[float] = None
+    source: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class UpdateFoodRequest(BaseModel):
+    id: int
+    date: Optional[str] = None
+    meal_label: Optional[str] = None
+    food_name: Optional[str] = None
+    amount_text: Optional[str] = None
+    calories: Optional[float] = None
+    protein_g: Optional[float] = None
+    carbs_g: Optional[float] = None
+    sugar_g: Optional[float] = None
+    fat_g: Optional[float] = None
+    satfat_g: Optional[float] = None
+    fiber_g: Optional[float] = None
+    salt_g: Optional[float] = None
+    price_eur: Optional[float] = None
+    source: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class DeleteFoodRequest(BaseModel):
     id: int
+
+
+class FavoriteRequest(BaseModel):
+    food_name: str
+    amount_text: Optional[str] = None
+    calories: Optional[float] = None
+    protein_g: Optional[float] = None
+    carbs_g: Optional[float] = None
+    sugar_g: Optional[float] = None
+    fat_g: Optional[float] = None
+    satfat_g: Optional[float] = None
+    fiber_g: Optional[float] = None
+    salt_g: Optional[float] = None
+    price_eur: Optional[float] = None
+    source: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class AddHealthRequest(BaseModel):
@@ -93,485 +111,442 @@ class GarminSyncRequest(BaseModel):
     date: Optional[str] = None
 
 
-# ── App Lifecycle ────────────────────────────────────────────────
+class GarminLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class GarminMfaRequest(BaseModel):
+    code: str
+
+
+class LookupRequest(BaseModel):
+    text: str
+    date: Optional[str] = None
+    meal: Optional[str] = None
+    answers: list[dict] = []
+    research: Optional[str] = None
+
+
+class AdviceRequest(BaseModel):
+    date: Optional[str] = None
+
+
+# ── App ──────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup/Shutdown: DB-Verbindung verwalten."""
-    # Startup: Verbindung wird lazy bei erstem Zugriff erstellt
+    init_database(verbose=False)
+    threading.Thread(target=auto_sync_garmin, name="garmin-auto-sync", daemon=True).start()
     yield
-    # Shutdown: Verbindung schliessen
     models.close_connection()
 
 
-# ── FastAPI App ──────────────────────────────────────────────────
-
-app = FastAPI(
-    title="AI Athletik-Coach API",
-    version="2.0.0",
-    lifespan=lifespan,
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI(title="AI Coach", version="3.0.0", lifespan=lifespan)
 
 
-# ── API-Wrapper (konsistente JSON-Responses) ─────────────────────
-
-def ok_response(data: dict) -> JSONResponse:
+def ok_response(data) -> JSONResponse:
     return JSONResponse({"status": "ok", "data": data})
 
 
-def error_response(message: str, status: int = 400) -> JSONResponse:
-    return JSONResponse({"status": "error", "message": message}, status_code=status)
+def error_response(message: str, status: int = 400, code: str | None = None) -> JSONResponse:
+    body = {"status": "error", "message": message}
+    if code:
+        body["code"] = code
+    return JSONResponse(body, status_code=status)
 
 
-# ── Healthcheck ──────────────────────────────────────────────────
+def _day(value: str | None) -> str:
+    return value or date.today().isoformat()
+
 
 @app.get("/api/healthz")
 async def healthcheck():
-    return {"status": "ok", "message": "AI Athletik-Coach API is running", "version": "2.0.0"}
+    return {"status": "ok", "message": "AI Coach API is running", "version": "3.0.0"}
 
 
-# ── Nutrition Endpoints ──────────────────────────────────────────
+# ── Ernaehrung ───────────────────────────────────────────────────
 
 @app.post("/api/nutrition/add")
 async def nutrition_add(req: AddFoodRequest):
     try:
-        result = models.add_food(
-            food_name=req.food_name,
-            date=req.date,
-            meal_label=req.meal_label,
-            amount_g=req.amount_g,
-            calories=req.calories,
-            protein_g=req.protein_g,
-            carbs_g=req.carbs_g,
-            fat_g=req.fat_g,
-            fiber_g=req.fiber_g,
-        )
-        return ok_response(result)
+        return ok_response(models.add_food(**req.model_dump()))
     except Exception as e:
         return error_response(f"add_food fehlgeschlagen: {e}", 500)
 
 
+@app.post("/api/nutrition/update")
+async def nutrition_update(req: UpdateFoodRequest):
+    entry = models.update_food(req.id, **req.model_dump(exclude={"id"}, exclude_unset=True))
+    return ok_response(entry) if entry else error_response("Eintrag nicht gefunden", 404)
+
+
 @app.post("/api/nutrition/delete")
 async def nutrition_delete(req: DeleteFoodRequest):
-    try:
-        result = models.delete_food(req.id)
-        return ok_response(result)
-    except Exception as e:
-        return error_response(f"delete_food fehlgeschlagen: {e}", 500)
+    return ok_response(models.delete_food(req.id))
 
 
 @app.get("/api/nutrition/today")
 async def nutrition_today(date: Optional[str] = Query(None)):
-    try:
-        result = models.get_food_log(date)
-        return ok_response(result)
-    except Exception as e:
-        return error_response(f"get_food_log fehlgeschlagen: {e}", 500)
+    return ok_response(models.get_food_log(date))
 
 
-# ── Health Endpoints ─────────────────────────────────────────────
+@app.get("/api/nutrition/range")
+async def nutrition_range(start: str = Query(...), end: str = Query(...)):
+    return ok_response({"entries": models.get_food_range(start, end)})
+
+
+# ── Favoriten ────────────────────────────────────────────────────
+
+@app.get("/api/favorites")
+async def favorites_list():
+    return ok_response({"favorites": models.list_favorites()})
+
+
+@app.post("/api/favorites")
+async def favorites_add(req: FavoriteRequest):
+    return ok_response(models.add_favorite(**req.model_dump()))
+
+
+@app.put("/api/favorites/{fav_id}")
+async def favorites_update(fav_id: int, req: FavoriteRequest):
+    fav = models.update_favorite(fav_id, **req.model_dump(exclude_unset=True))
+    return ok_response(fav) if fav else error_response("Favorit nicht gefunden", 404)
+
+
+@app.delete("/api/favorites/{fav_id}")
+async def favorites_delete(fav_id: int):
+    return ok_response(models.delete_favorite(fav_id))
+
+
+# ── Profil & Tagesziele ──────────────────────────────────────────
+
+@app.get("/api/profile")
+async def profile_get():
+    return ok_response(models.get_profile())
+
+
+@app.put("/api/profile")
+async def profile_put(payload: dict):
+    return ok_response(models.save_profile(payload))
+
+
+def targets_for(day: str) -> dict:
+    health = models.get_health(day).get("health") or {}
+    active = health.get("active_calories") if health.get("source") == "garmin" else None
+    return compute_targets(models.get_profile(), active, day)
+
+
+@app.get("/api/targets")
+async def targets_get(date: Optional[str] = Query(None)):
+    return ok_response(targets_for(_day(date)))
+
+
+@app.get("/api/targets/range")
+async def targets_range(start: str = Query(...), end: str = Query(...)):
+    first, last = date.fromisoformat(start), date.fromisoformat(end)
+    days = [(first + timedelta(days=i)).isoformat() for i in range(min((last - first).days + 1, 366))]
+    return ok_response({"targets": {d: targets_for(d) for d in days}})
+
+
+# ── Health ───────────────────────────────────────────────────────
 
 @app.post("/api/health/manual")
 async def health_manual(req: AddHealthRequest):
-    try:
-        result = models.add_health(
-            date=req.date,
-            hrv_avg=req.hrv_avg,
-            hrv_status=req.hrv_status,
-            sleep_score=req.sleep_score,
-            sleep_hours=req.sleep_hours,
-            resting_hr=req.resting_hr,
-            body_battery_high=req.body_battery_high,
-            body_battery_low=req.body_battery_low,
-            stress_avg=req.stress_avg,
-            steps=req.steps,
-            active_calories=req.active_calories,
-            source=req.source,
-        )
-        return ok_response(result)
-    except Exception as e:
-        return error_response(f"add_health fehlgeschlagen: {e}", 500)
+    return ok_response(models.add_health(**req.model_dump()))
 
 
 @app.get("/api/health/today")
 async def health_today(date: Optional[str] = Query(None)):
+    return ok_response(models.get_health(date))
+
+
+# ── Garmin ───────────────────────────────────────────────────────
+
+def _garmin_error(e: GarminError) -> JSONResponse:
+    return error_response(str(e), 401 if isinstance(e, fetch_garmin.GarminAuthRequired) else 502, e.code)
+
+
+@app.get("/api/garmin/status")
+async def garmin_status():
+    return ok_response({"connected": fetch_garmin.is_connected()})
+
+
+@app.post("/api/garmin/login")
+def garmin_login(req: GarminLoginRequest):
     try:
-        result = models.get_health(date)
-        return ok_response(result)
-    except Exception as e:
-        return error_response(f"get_health fehlgeschlagen: {e}", 500)
+        result = fetch_garmin.login_with_credentials(req.email.strip(), req.password)
+    except GarminError as e:
+        return _garmin_error(e)
+    if result == "ok":
+        threading.Thread(target=auto_sync_garmin, daemon=True).start()
+    return ok_response({"connected": result == "ok", "mfa": result == "mfa"})
 
 
-# ── Garmin Sync ──────────────────────────────────────────────────
+@app.post("/api/garmin/mfa")
+def garmin_mfa(req: GarminMfaRequest):
+    try:
+        fetch_garmin.submit_mfa(req.code)
+    except GarminError as e:
+        return _garmin_error(e)
+    threading.Thread(target=auto_sync_garmin, daemon=True).start()
+    return ok_response({"connected": True})
+
+
+@app.post("/api/garmin/logout")
+async def garmin_logout():
+    fetch_garmin.logout()
+    return ok_response({"connected": False})
+
+
+def sync_day(client, target: date) -> dict:
+    health = fetch_garmin.fetch_health_data(client, target)
+    workouts = fetch_garmin.fetch_workouts(client, target)
+    models.add_health(date=target.isoformat(), source="garmin", **health)
+    models.replace_workouts(target.isoformat(), workouts)
+    return {"date": target.isoformat(), "health": health, "workouts": workouts, "source": "garmin"}
+
+
+def import_body_profile(client) -> dict:
+    garmin_profile = fetch_garmin.fetch_body_profile(client)
+    updates = {k: v for k, v in garmin_profile.items() if k in models.DEFAULT_PROFILE and v not in (None, "")}
+    return {"profile": models.save_profile(updates) if updates else models.get_profile(), "fromGarmin": garmin_profile}
+
 
 @app.post("/api/garmin/sync")
-async def garmin_sync(req: GarminSyncRequest):
-    """Holt Daten von Garmin Connect und speichert sie direkt in die DB."""
-    target_date_str = req.date or date.today().isoformat()
-
+def garmin_sync(req: GarminSyncRequest):
     try:
-        target_date = date.fromisoformat(target_date_str)
+        target = date.fromisoformat(_day(req.date))
     except ValueError:
-        return error_response(f"Ungueltiges Datum: {target_date_str}")
-
-    # Garmin-Modul importieren (lazy, da es garminconnect braucht)
+        return error_response(f"Ungueltiges Datum: {req.date}")
     try:
-        from garmin.fetch_garmin import (
-            load_env as garmin_load_env,
-            get_garmin_client,
-            fetch_health_data,
-            fetch_workouts,
-        )
-    except ImportError as e:
-        return error_response(f"Garmin-Modul nicht verfuegbar: {e}", 500)
+        client = fetch_garmin.get_garmin_client()
+        result = sync_day(client, target)
+        if models.get_profile().get("garminWeightSync"):
+            import_body_profile(client)
+    except GarminError as e:
+        return _garmin_error(e)
+    return ok_response(result)
 
-    # Garmin-Daten abrufen
+
+@app.post("/api/garmin/import-profile")
+def garmin_import_profile():
     try:
-        garmin_load_env()
-        client = get_garmin_client()
-    except SystemExit:
-        # fetch_garmin.py ruft sys.exit() bei Fehlern auf
-        return JSONResponse({
-            "status": "error",
-            "code": "garmin_auth_failed",
-            "message": "Garmin-Login fehlgeschlagen. Bitte manuell eingeben.",
+        return ok_response(import_body_profile(fetch_garmin.get_garmin_client()))
+    except GarminError as e:
+        return _garmin_error(e)
+
+
+_sync_lock = threading.Lock()
+
+
+def auto_sync_garmin(days: int = 7) -> None:
+    """Beim Start: heute + gestern immer, aeltere Tage nur wenn noch keine Garmin-Daten da sind."""
+    if not fetch_garmin.is_connected() or not _sync_lock.acquire(blocking=False):
+        return
+    try:
+        client = fetch_garmin.get_garmin_client()
+        today = date.today()
+        have = models.synced_dates((today - timedelta(days=days - 1)).isoformat(), today.isoformat())
+        for offset in range(days):
+            target = today - timedelta(days=offset)
+            if offset < 2 or target.isoformat() not in have:
+                sync_day(client, target)
+        if models.get_profile().get("garminWeightSync"):
+            import_body_profile(client)
+        log.info("Garmin-Auto-Sync abgeschlossen")
+    except Exception as e:
+        log.warning("Garmin-Auto-Sync fehlgeschlagen: %s", e)
+    finally:
+        _sync_lock.release()
+
+
+# ── Claude (Claude-Abo ueber die Claude Code CLI) ────────────────
+# Synchrone Endpoints: FastAPI fuehrt sie im Threadpool aus, der
+# blockierende CLI-Aufruf haelt so den Server nicht an.
+
+@app.get("/api/claude/status")
+def claude_status():
+    binary = claude_client.find_claude()
+    return ok_response({"found": bool(binary), "path": binary})
+
+
+def _num_or_none(value):
+    try:
+        return None if value is None or value == "" else float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _clean_item(raw: dict) -> dict:
+    """Claude-Format → Spaltennamen der nutrition_log."""
+    return {
+        "food_name": str(raw.get("name") or "Unbenannt")[:200],
+        "amount_text": str(raw.get("amount") or "")[:100],
+        "calories": _num_or_none(raw.get("kcal")),
+        "protein_g": _num_or_none(raw.get("protein")),
+        "carbs_g": _num_or_none(raw.get("carbs")),
+        "sugar_g": _num_or_none(raw.get("sugar")),
+        "fat_g": _num_or_none(raw.get("fat")),
+        "satfat_g": _num_or_none(raw.get("satfat")),
+        "fiber_g": _num_or_none(raw.get("fiber")),
+        "salt_g": _num_or_none(raw.get("salt")),
+        "price_eur": _num_or_none(raw.get("price")),
+        "source": str(raw.get("source") or "")[:500],
+        "notes": str(raw.get("notes") or "")[:1000],
+        "confidence": str(raw.get("confidence") or ""),
+    }
+
+
+@app.post("/api/claude/lookup")
+def claude_lookup(req: LookupRequest):
+    if not req.text.strip():
+        return error_response("Bitte beschreibe, was du gegessen hast.")
+    day = _day(req.date)
+    menu = mensa.get_menu(req.text, day, models.get_profile()["priceGroup"])
+    prompt = claude_client.lookup_prompt(
+        req.text, day, req.meal, req.answers[:12], (req.research or "")[:6000], menu)
+    try:
+        text, usage = claude_client.run_claude(prompt, kind="lookup")
+        result = claude_client.extract_json(text)
+    except (ClaudeError, json.JSONDecodeError) as e:
+        return error_response(str(e), 502)
+
+    questions = [
+        {"question": str(q["question"]), "options": [str(o) for o in (q.get("options") or [])][:6]}
+        for q in (result.get("questions") or []) if isinstance(q, dict) and q.get("question")
+    ][:3]
+    if result.get("status") == "question" and questions:
+        research = result.get("research") or ""
+        return ok_response({
+            "status": "question", "questions": questions, "comment": result.get("comment") or "",
+            "research": research if isinstance(research, str) else json.dumps(research, ensure_ascii=False),
+            "usage": usage,
         })
-    except Exception as e:
-        return JSONResponse({
-            "status": "error",
-            "code": "garmin_error",
-            "message": str(e),
-        })
-
-    try:
-        health_data = fetch_health_data(client, target_date)
-        workout_data = fetch_workouts(client, target_date)
-    except Exception as e:
-        return error_response(f"Garmin-Daten konnten nicht abgerufen werden: {e}", 500)
-
-    # Health in DB speichern
-    try:
-        models.add_health(
-            date=target_date_str,
-            source="garmin",
-            hrv_avg=health_data.get("hrv_avg"),
-            hrv_status=health_data.get("hrv_status"),
-            sleep_score=health_data.get("sleep_score"),
-            sleep_hours=health_data.get("sleep_hours"),
-            resting_hr=health_data.get("resting_hr"),
-            body_battery_high=health_data.get("body_battery_high"),
-            body_battery_low=health_data.get("body_battery_low"),
-            stress_avg=health_data.get("stress_avg"),
-            steps=health_data.get("steps"),
-            active_calories=health_data.get("active_calories"),
-        )
-    except Exception as e:
-        return error_response(f"Health-Daten speichern fehlgeschlagen: {e}", 500)
-
-    # Workouts in DB speichern
-    for w in workout_data:
-        try:
-            models.add_workout(
-                date=target_date_str,
-                activity_type=w.get("activity_type"),
-                duration_min=w.get("duration_min"),
-                distance_km=w.get("distance_km"),
-                avg_hr=w.get("avg_hr"),
-                max_hr=w.get("max_hr"),
-                calories_burned=w.get("calories_burned"),
-                training_load=w.get("training_load"),
-            )
-        except Exception:
-            pass  # Einzelne Workout-Fehler nicht kritisch
-
     return ok_response({
-        "date": target_date_str,
-        "health": health_data,
-        "workouts": workout_data,
-        "source": "garmin",
+        "status": "ok", "items": [_clean_item(i) for i in result.get("items") or [] if isinstance(i, dict)],
+        "comment": result.get("comment") or "", "usage": usage,
     })
 
 
-# ── History / Summary ────────────────────────────────────────────
+@app.post("/api/claude/advice")
+def claude_advice(req: AdviceRequest):
+    day = _day(req.date)
+    totals = models.get_food_log(day)["totals"]
+    try:
+        text, usage = claude_client.run_claude(
+            claude_client.advice_prompt(day, targets_for(day), totals), kind="advice", timeout=180)
+    except ClaudeError as e:
+        return error_response(str(e), 502)
+    return ok_response({"text": text, "usage": usage})
+
+
+@app.get("/api/usage")
+async def usage_get():
+    return ok_response(models.get_claude_usage())
+
+
+@app.post("/api/usage/refresh")
+def usage_refresh():
+    """Mini-Anfrage an Haiku ohne Tools, nur um den aktuellen Limit-Stand abzurufen."""
+    try:
+        _, usage = claude_client.run_claude("Antworte nur mit: ok", kind="limit-check",
+                                            model="haiku", tools="", timeout=60)
+    except ClaudeError as e:
+        return error_response(str(e), 502)
+    return ok_response(usage)
+
+
+# ── Verlauf ──────────────────────────────────────────────────────
 
 @app.get("/api/history/summary")
 async def history_summary(days: int = Query(7, ge=1, le=365)):
-    try:
-        result = models.get_summary(days)
-        return ok_response(result)
-    except Exception as e:
-        return error_response(f"get_summary fehlgeschlagen: {e}", 500)
+    return ok_response(models.get_summary(days))
 
 
-# ── AI Report ────────────────────────────────────────────────────
+# ── Coach-Report (Claude) ────────────────────────────────────────
 
 @app.get("/api/report/generate")
-async def report_generate():
-    """Generiert den AI Coaching Report (Ollama mit Fallback)."""
+def report_generate():
+    summary = models.get_summary(7)
+    today = date.today().isoformat()
+    prompt = claude_client.report_prompt(
+        build_report_context(summary), build_nutrition_lines(7), targets_for(today))
     try:
-        summary_data = models.get_summary(7)
-    except Exception as e:
-        return error_response(f"Zusammenfassung fehlgeschlagen: {e}", 500)
+        report, usage = claude_client.run_claude(prompt, kind="report", tools="", timeout=300)
+    except ClaudeError as e:
+        return error_response(str(e), 502)
+    return ok_response({"report": report.strip(), "mode": "claude",
+                        "model": usage["request"]["model"], "usage": usage})
 
-    context = build_report_context(summary_data)
-    ollama_report, ollama_error = generate_ollama_report(context)
-
-    if ollama_report:
-        return ok_response({
-            "report": ollama_report,
-            "mode": "ollama",
-            "model": os.environ.get("OLLAMA_MODEL", "gemma2"),
-        })
-
-    return ok_response({
-        "report": build_fallback_report(summary_data),
-        "mode": "fallback",
-        "model": None,
-        "ollama_error": ollama_error,
-    })
-
-
-# ── Ollama Integration (aus http_server.py uebernommen) ─────────
 
 def build_report_context(summary_data: dict) -> str:
-    """Baut den Kontext-Text fuer Ollama auf."""
-    lines = ["=== ATHLETIK-DATEN DER LETZTEN 7 TAGE ===", ""]
+    """Garmin-Daten der letzten 7 Tage als Text fuer den Report."""
+    lines = ["=== TRAINING & ERHOLUNG, LETZTE 7 TAGE ===", ""]
 
     avg = summary_data.get("health_averages") or {}
-    if avg:
-        lines.append("--- DURCHSCHNITTSWERTE ---")
-        if avg.get("avg_hrv") is not None:
-            lines.append(f"HRV: {avg['avg_hrv']} ms")
-        if avg.get("avg_sleep_score") is not None:
-            lines.append(f"Sleep Score: {avg['avg_sleep_score']}/100")
-        if avg.get("avg_sleep_hours") is not None:
-            lines.append(f"Schlafdauer: {avg['avg_sleep_hours']} h")
-        if avg.get("avg_resting_hr") is not None:
-            lines.append(f"Ruhepuls: {avg['avg_resting_hr']} bpm")
-        if avg.get("avg_stress") is not None:
-            lines.append(f"Stress-Level: {avg['avg_stress']}/100")
-        if avg.get("avg_steps") is not None:
-            lines.append(f"Schritte/Tag: {round(avg['avg_steps'])}")
-        lines.append("")
+    labels = [("avg_hrv", "HRV", "ms"), ("avg_sleep_score", "Sleep Score", "/100"),
+              ("avg_sleep_hours", "Schlafdauer", "h"), ("avg_resting_hr", "Ruhepuls", "bpm"),
+              ("avg_stress", "Stress-Level", "/100"), ("avg_steps", "Schritte/Tag", "")]
+    values = [f"{label}: {round(avg[key]) if key == 'avg_steps' else avg[key]} {unit}".strip()
+              for key, label, unit in labels if avg.get(key) is not None]
+    if values:
+        lines += ["--- DURCHSCHNITTSWERTE ---", *values, ""]
 
     health_daily = summary_data.get("health_daily") or []
     if health_daily:
         lines.append("--- TAEGLICHE HEALTH-DATEN ---")
         for day in health_daily:
             lines.append(
-                f"{day.get('date')}: HRV={day.get('hrv_avg') or '-'} "
-                f"Sleep={day.get('sleep_score') or '-'} Puls={day.get('resting_hr') or '-'} "
-                f"Stress={day.get('stress_avg') or '-'} Schritte={day.get('steps') or '-'}"
+                f"{day.get('date')}: HRV={day.get('hrv_avg') or '-'} Sleep={day.get('sleep_score') or '-'} "
+                f"Puls={day.get('resting_hr') or '-'} Stress={day.get('stress_avg') or '-'} "
+                f"Schritte={day.get('steps') or '-'} aktive kcal={day.get('active_calories') or '-'}"
             )
         lines.append("")
 
     workouts = summary_data.get("workouts") or []
     if workouts:
         lines.append("--- WORKOUTS ---")
-        for workout in workouts:
+        for w in workouts:
             lines.append(
-                f"{workout.get('date')}: {workout.get('activity_type') or 'Workout'} | "
-                f"{workout.get('duration_min') or '-'} min | {workout.get('distance_km') or '-'} km | "
-                f"HR {workout.get('avg_hr') or '-'}/{workout.get('max_hr') or '-'} | "
-                f"{workout.get('calories_burned') or '-'} kcal | Load: {workout.get('training_load') or '-'}"
+                f"{w.get('date')}: {w.get('activity_type') or 'Workout'} | {w.get('duration_min') or '-'} min | "
+                f"{w.get('distance_km') or '-'} km | HR {w.get('avg_hr') or '-'}/{w.get('max_hr') or '-'} | "
+                f"{w.get('calories_burned') or '-'} kcal | Load: {w.get('training_load') or '-'}"
             )
-        lines.append("")
+    return "\n".join(lines) if len(lines) > 2 else "Keine Garmin-Daten in den letzten 7 Tagen."
 
-    workout_summary = summary_data.get("workout_summary") or {}
-    if workout_summary:
-        lines.append("--- WOCHEN-ZUSAMMENFASSUNG ---")
-        total_workouts = workout_summary.get("total_workouts") or 0
-        total_duration = workout_summary.get("total_duration_min") or 0
-        total_calories = workout_summary.get("total_calories_burned") or 0
-        avg_hr = workout_summary.get("avg_heart_rate") or 0
+
+def build_nutrition_lines(days: int) -> str:
+    """Tagessummen der Ernaehrung fuer den Report, jeweils mit Tagesziel."""
+    end = date.today()
+    start = end - timedelta(days=days - 1)
+    per_day: dict[str, dict] = {}
+    for e in models.get_food_range(start.isoformat(), end.isoformat()):
+        d = per_day.setdefault(e["date"], {"kcal": 0, "protein": 0, "carbs": 0, "fat": 0, "price": 0, "n": 0})
+        d["kcal"] += e.get("calories") or 0
+        d["protein"] += e.get("protein_g") or 0
+        d["carbs"] += e.get("carbs_g") or 0
+        d["fat"] += e.get("fat_g") or 0
+        d["price"] += e.get("price_eur") or 0
+        d["n"] += 1
+    lines = []
+    for day, v in sorted(per_day.items()):
+        t = targets_for(day)
         lines.append(
-            f"Workouts: {total_workouts} | Dauer: {total_duration} min | "
-            f"Kalorien: {total_calories} | Avg HR: {round(avg_hr)}"
+            f"{day}: {round(v['kcal'])}/{t['kcal']} kcal, Eiweiß {round(v['protein'])}/{t['protein']} g, "
+            f"KH {round(v['carbs'])} g, Fett {round(v['fat'])} g, {v['n']} Einträge, {v['price']:.2f} €"
         )
-
     return "\n".join(lines)
 
 
-def generate_ollama_report(context: str) -> tuple[str | None, str | None]:
-    """Ruft Ollama via HTTP auf und gibt (report, error) zurueck."""
-    from urllib import request as urllib_request, error as urllib_error
-
-    base_url = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
-    model = os.environ.get("OLLAMA_MODEL", "gemma2")
-
-    payload = {
-        "model": model,
-        "prompt": context,
-        "system": (
-            "Du bist ein erfahrener Athletik- und Erholungs-Coach. "
-            "Analysiere die folgenden Trainings- und Gesundheitsdaten und gib "
-            "einen kurzen, praxisnahen Coaching-Report auf Deutsch. "
-            "Beruecksichtige HRV-Trends, Schlafqualitaet, Stresslevel und Trainingsbelastung. "
-            "Gib konkrete Empfehlungen fuer Training, Erholung und Schlaf. "
-            "Halte den Report unter 500 Woertern. Formatiere mit Markdown-Ueberschriften und Aufzaehlungen."
-        ),
-        "stream": False,
-        "options": {"temperature": 0.7, "num_predict": 512},
-    }
-
-    print(f"[Ollama] Sende Anfrage an {base_url} (Modell: {model})...", flush=True)
-
-    request = urllib_request.Request(
-        f"{base_url}/api/generate",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    try:
-        with urllib_request.urlopen(request, timeout=900) as response:
-            raw = response.read().decode("utf-8")
-            print("[Ollama] Antwort erfolgreich erhalten!", flush=True)
-    except urllib_error.HTTPError as e:
-        err_body = e.read().decode("utf-8") if hasattr(e, "read") else ""
-        return None, f"HTTP Error {e.code}: {err_body}"
-    except (urllib_error.URLError, TimeoutError, ValueError) as e:
-        return None, f"Connection/Timeout Error: {e}"
-
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as e:
-        return None, f"JSON Decode Error: {e}"
-
-    report = parsed.get("response")
-    if not isinstance(report, str) or not report.strip():
-        return None, "Ollama hat keinen oder einen leeren Report generiert."
-    return report.strip(), None
-
-
-def build_fallback_report(summary_data: dict) -> str:
-    """Regel-basierter Fallback-Report wenn Ollama nicht verfuegbar."""
-    avg = summary_data.get("health_averages") or {}
-    workouts = summary_data.get("workouts") or []
-    workout_summary = summary_data.get("workout_summary") or {}
-
-    hrv = avg.get("avg_hrv")
-    sleep_score = avg.get("avg_sleep_score")
-    sleep_hours = avg.get("avg_sleep_hours")
-    resting_hr = avg.get("avg_resting_hr")
-    stress = avg.get("avg_stress")
-    steps = avg.get("avg_steps")
-    total_workouts = workout_summary.get("total_workouts") or len(workouts)
-
-    bullets = []
-    if sleep_score is not None and sleep_score < 75:
-        bullets.append("Schlafscore ist eher mittel. Heute besser frueh runterfahren und Schlaf priorisieren.")
-    if hrv is not None and hrv < 50:
-        bullets.append("HRV ist eher niedrig. Belastung lieber moderat halten und keine harte Einheit erzwingen.")
-    if stress is not None and stress >= 50:
-        bullets.append("Stress ist erhoeht. Fokus auf Erholung, Spaziergaenge und lockere Bewegung.")
-    if resting_hr is not None and resting_hr >= 55:
-        bullets.append("Ruhepuls liegt eher hoch. Das spricht fuer eine vorsichtige Trainingssteuerung.")
-    if steps is not None and steps < 7000:
-        bullets.append("Alltagsbewegung ist noch ausbaufaehig. Mehr lockere Schritte wuerden helfen.")
-    if total_workouts == 0:
-        bullets.append("Diese Woche gab es noch keine Workouts. Ein lockerer Einstieg waere sinnvoll.")
-
-    if not bullets:
-        bullets.append("Die Werte wirken insgesamt stabil. Trainingslast und Erholung passen grob zusammen.")
-
-    lines = [
-        "# AI Coaching Report", "",
-        "## Kurzfazit",
-        f"- HRV: {hrv if hrv is not None else 'n/a'} ms",
-        f"- Schlafscore: {sleep_score if sleep_score is not None else 'n/a'}/100",
-        f"- Schlafdauer: {sleep_hours if sleep_hours is not None else 'n/a'} h",
-        f"- Ruhepuls: {resting_hr if resting_hr is not None else 'n/a'} bpm",
-        f"- Stress: {stress if stress is not None else 'n/a'}/100",
-        f"- Schritte/Tag: {round(steps) if steps is not None else 'n/a'}",
-        "", "## Einordnung",
-    ]
-    lines.extend(f"- {bullet}" for bullet in bullets)
-    lines.extend([
-        "", "## Empfehlung fuer heute",
-        "- Wenn du dich frisch fuehlst: lockere bis moderate Einheit.",
-        "- Wenn Schlaf oder HRV schwach sind: Erholung, Zone-2 oder Spaziergang.",
-        "- Naechster Fokus: Schlafrhythmus stabil halten und Alltagsbewegung sichern.",
-    ])
-    return "\n".join(lines)
-
-
-# ── Legacy /run Endpoint (Abwaertskompatibilitaet) ───────────────
-
-@app.post("/run")
-async def legacy_run(payload: dict):
-    """
-    Abwaertskompatibel: Akzeptiert {action, params} wie der alte http_server.py.
-    Leitet intern an die neuen Endpoints weiter.
-    """
-    action = payload.get("action")
-    params = payload.get("params") or {}
-
-    action_map = {
-        "add_food": lambda p: models.add_food(**_remap_food(p)),
-        "delete_food": lambda p: models.delete_food(p["id"]),
-        "get_food_log": lambda p: models.get_food_log(p.get("date")),
-        "add_health": lambda p: models.add_health(**p),
-        "get_health": lambda p: models.get_health(p.get("date")),
-        "add_workout": lambda p: models.add_workout(**p),
-        "get_summary": lambda p: models.get_summary(p.get("days", 7)),
-    }
-
-    if action in action_map:
-        try:
-            result = action_map[action](params)
-            return {"status": "ok", "data": result}
-        except Exception as e:
-            return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
-
-    if action == "generate_report":
-        try:
-            summary_data = models.get_summary(7)
-            context = build_report_context(summary_data)
-            report, error = generate_ollama_report(context)
-            if report:
-                return {"status": "ok", "data": {"report": report, "mode": "ollama"}}
-            return {"status": "ok", "data": {"report": build_fallback_report(summary_data), "mode": "fallback", "ollama_error": error}}
-        except Exception as e:
-            return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
-
-    return JSONResponse({"status": "error", "message": f"Unknown action: {action}"}, status_code=400)
-
-
-def _remap_food(params: dict) -> dict:
-    """Mappt Legacy-Parameter-Namen auf models.add_food()."""
-    return {
-        "food_name": params.get("food_name", ""),
-        "date": params.get("date"),
-        "meal_label": params.get("meal_label", "snack"),
-        "amount_g": params.get("amount_g"),
-        "calories": params.get("calories", 0),
-        "protein_g": params.get("protein_g", 0),
-        "carbs_g": params.get("carbs_g", 0),
-        "fat_g": params.get("fat_g", 0),
-        "fiber_g": params.get("fiber_g", 0),
-    }
-
-
-# ── Static Files (Frontend) ─────────────────────────────────────
+# ── Frontend ─────────────────────────────────────────────────────
 
 if FRONTEND_DIR.exists():
     app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="static")
 
 
-# ── Main ─────────────────────────────────────────────────────────
-
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("OPEN_GARMIN_API_PORT", "8765"))
-    print(f"AI Athletik-Coach API v2.0 starting on http://localhost:{port}")
-    print(f"Frontend: http://localhost:{port}/")
-    print(f"API Docs: http://localhost:{port}/docs")
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+    print(f"AI Coach API auf http://127.0.0.1:{port}/")
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
